@@ -12,6 +12,15 @@ except ImportError:
     import xml.etree.ElementTree as ET
     THIRD_PARTY_SCRAPER_AVAILABLE = False
 
+def ensure_english_pib_url(url: str) -> str:
+    """Ensures the PIB URL always has lang=1 so it opens the official English page."""
+    if not url:
+        return url
+    if "pib.gov.in" in url and "lang=" not in url.lower():
+        sep = "&" if "?" in url else "?"
+        return f"{url}{sep}lang=1"
+    return url
+
 def is_english_text(text: str) -> bool:
     """Checks that the text is primarily in English and has no Devanagari/Indic script."""
     if not text:
@@ -77,6 +86,7 @@ class PIBScraper:
                 pub_date = item.findtext("pubDate", "").strip()
                 desc = item.findtext("description", "").strip()
 
+                link = ensure_english_pib_url(link)
                 prid = self.extract_prid_from_url(link) or str(abs(hash(title)))
                 releases.append({
                     "pib_id": prid,
@@ -100,7 +110,9 @@ class PIBScraper:
                     pub_date = p_match.group(1).strip() if p_match else ""
                     desc = d_match.group(1).strip() if d_match else ""
 
-                    prid = self.extract_prid_from_url(link) or str(abs(hash(title)))
+                    link = ensure_english_pib_url(link)
+                    link = ensure_english_pib_url(link)
+                prid = self.extract_prid_from_url(link) or str(abs(hash(title)))
                     releases.append({
                         "pib_id": prid,
                         "title": title,

@@ -22,16 +22,20 @@ class TelegramNotifier:
         """
         Formats article into a clean, readable Inshorts-style HTML card.
         """
-        gs_paper = html.escape(str(article.get("gs_paper", "UPSC Current Affairs")))
+        gs_paper = html.escape(str(article.get("gs_paper", "UPSC GS")))
+        subject_group = html.escape(str(article.get("subject_group", "General Affairs")))
         title = html.escape(str(article.get("title", "")))
         ministry = html.escape(str(article.get("ministry", "Government of India")))
         summary = html.escape(str(article.get("short_summary", "")))
         prelims = html.escape(str(article.get("prelims_facts", "")))
         mains = html.escape(str(article.get("mains_pointer", "")))
         link = article.get("link", config.PIB_BASE_URL)
+        if "pib.gov.in" in link and "lang=" not in link.lower():
+            link += "&lang=1" if "?" in link else "?lang=1"
 
         msg = (
-            f"🏛 <b>{gs_paper}</b> | <i>{ministry}</i>\n\n"
+            f"🏛 <b>{gs_paper}</b> • <b>{subject_group}</b>\n"
+            f"🏢 <i>{ministry}</i>\n\n"
             f"📌 <b>{title}</b>\n\n"
             f"📝 <b>Short Summary:</b>\n{summary}\n\n"
         )

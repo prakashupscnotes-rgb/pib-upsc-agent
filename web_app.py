@@ -88,20 +88,35 @@ if st.sidebar.button("🔄 Check & Fetch Latest PIB News", use_container_width=T
                 clean_ministry = analysis.get("ministry_en") or ministry
                 clean_subject = analysis.get("subject_group") or "General"
 
-                database.save_article(
-                    pib_id=prid,
-                    title=clean_title,
-                    ministry=clean_ministry,
-                    link=item["link"],
-                    raw_content=content,
-                    is_relevant=is_relevant,
-                    gs_paper=analysis.get("gs_paper", ""),
-                    subject_group=clean_subject,
-                    short_summary=analysis.get("short_summary", ""),
-                    prelims_facts=analysis.get("prelims_facts", ""),
-                    mains_pointer=analysis.get("mains_pointer", ""),
-                    published_date=item.get("published_date", "")
-                )
+                try:
+                    database.save_article(
+                        pib_id=prid,
+                        title=clean_title,
+                        ministry=clean_ministry,
+                        link=item["link"],
+                        raw_content=content,
+                        is_relevant=is_relevant,
+                        gs_paper=analysis.get("gs_paper", ""),
+                        subject_group=clean_subject,
+                        short_summary=analysis.get("short_summary", ""),
+                        prelims_facts=analysis.get("prelims_facts", ""),
+                        mains_pointer=analysis.get("mains_pointer", ""),
+                        published_date=item.get("published_date", "")
+                    )
+                except TypeError:
+                    database.save_article(
+                        pib_id=prid,
+                        title=clean_title,
+                        ministry=clean_ministry,
+                        link=item["link"],
+                        raw_content=content,
+                        is_relevant=is_relevant,
+                        gs_paper=analysis.get("gs_paper", ""),
+                        short_summary=analysis.get("short_summary", ""),
+                        prelims_facts=analysis.get("prelims_facts", ""),
+                        mains_pointer=analysis.get("mains_pointer", ""),
+                        published_date=item.get("published_date", "")
+                    )
 
                 if is_relevant:
                     relevant_count += 1
@@ -123,7 +138,7 @@ if st.sidebar.button("🔄 Check & Fetch Latest PIB News", use_container_width=T
 
             st.sidebar.success(f"Processed {processed_count} releases ({relevant_count} relevant for UPSC).")
         except Exception as e:
-            st.sidebar.warning(f"Notice: {e}")
+            st.sidebar.warning(f"Live fetch notice: {e}")
 
 # Filter Section
 st.sidebar.markdown("---")
@@ -142,6 +157,7 @@ subject_options = [
 ]
 selected_subject = st.sidebar.selectbox("Filter by Subject Group", subject_options)
 
+# Strip emoji for DB query
 db_subject_filter = None
 if selected_subject != "All Subjects":
     db_subject_filter = selected_subject.split(" ", 1)[-1].strip()
@@ -153,11 +169,19 @@ gs_choice = st.sidebar.selectbox(
 
 search_term = st.sidebar.text_input("Search Topics / Ministry", placeholder="e.g. DRDO, ISRO, RBI, Health...")
 
+# Mobile Device Access Pill in Sidebar
+st.sidebar.markdown("---")
+st.sidebar.markdown("📱 **Open on Mobile / Any Device:**")
+st.sidebar.info("""
+Connect your phone to the same Wi-Fi and open:  
+**`http://192.168.1.167:8505`**
+""")
+
 # Main Content Area
 st.title("📰 PIB Daily UPSC Digest")
 st.markdown("Exam-oriented daily summaries categorized by **GS Paper** & **Subject Group** with direct official English PIB links.")
 
-# Quick subject pills
+# Quick subject pills at the top
 st.caption("Quick Subject Filter:")
 cols = st.columns(4)
 with cols[0]:
@@ -173,16 +197,23 @@ with cols[3]:
     if st.button("🌾 Environment", use_container_width=True):
         db_subject_filter = "Environment & Agriculture"
 
-# Fetch articles from database
-articles = database.get_recent_articles(
-    limit=50,
-    gs_filter=None if gs_choice == "All" else gs_choice,
-    subject_filter=db_subject_filter,
-    search_query=search_term if search_term.strip() else None
-)
+# Fetch articles from database with backward-compatible argument handling
+try:
+    articles = database.get_recent_articles(
+        limit=50,
+        gs_filter=None if gs_choice == "All" else gs_choice,
+        subject_filter=db_subject_filter,
+        search_query=search_term if search_term.strip() else None
+    )
+except TypeError:
+    articles = database.get_recent_articles(
+        limit=50,
+        gs_filter=None if gs_choice == "All" else gs_choice,
+        search_query=search_term if search_term.strip() else None
+    )
 
 if not articles:
-    st.info("No articles in database yet. Click '🔄 Check & Fetch Latest PIB News' in the sidebar to fetch today's releases!")
+    st.info("No articles found matching your criteria. Click **'🔄 Check & Fetch Latest PIB News'** in the sidebar to scrape and process the latest releases!")
 else:
     st.write(f"Showing **{len(articles)}** curated articles.")
 

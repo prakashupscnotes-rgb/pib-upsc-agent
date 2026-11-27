@@ -49,9 +49,10 @@ def run_pipeline():
         analysis = agent.analyze(title=title, ministry=ministry, content=content)
         is_relevant = analysis.get("is_relevant", False)
 
-        # Use English-refined title and ministry if available
+        # Use English-refined title, ministry and subject
         clean_title = analysis.get("title_en") or title
         clean_ministry = analysis.get("ministry_en") or ministry
+        clean_subject = analysis.get("subject_group") or "General"
 
         # 4. Save to Database
         database.save_article(
@@ -62,6 +63,7 @@ def run_pipeline():
             raw_content=content,
             is_relevant=is_relevant,
             gs_paper=analysis.get("gs_paper", ""),
+            subject_group=clean_subject,
             short_summary=analysis.get("short_summary", ""),
             prelims_facts=analysis.get("prelims_facts", ""),
             mains_pointer=analysis.get("mains_pointer", ""),
@@ -70,7 +72,7 @@ def run_pipeline():
 
         if is_relevant:
             relevant_found += 1
-            print(f"  -> ✅ RELEVANT: Tagged as {analysis.get('gs_paper')} | {analysis.get('short_summary')[:60]}...")
+            print(f"  -> ✅ RELEVANT: Tagged as {analysis.get('gs_paper')} [{clean_subject}] | {clean_title[:50]}...")
 
             # 5. Send via Telegram Bot (100% English)
             article_payload = {
@@ -78,6 +80,7 @@ def run_pipeline():
                 "ministry": clean_ministry,
                 "link": link,
                 "gs_paper": analysis.get("gs_paper", ""),
+                "subject_group": clean_subject,
                 "short_summary": analysis.get("short_summary", ""),
                 "prelims_facts": analysis.get("prelims_facts", ""),
                 "mains_pointer": analysis.get("mains_pointer", "")

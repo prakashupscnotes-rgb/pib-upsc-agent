@@ -27,6 +27,10 @@ Syllabus Framework:
 - GS-4: Ethics, Integrity and Aptitude.
 - Prelims Pointer: Specific factual schemes, portals, acronyms, or reports.
 
+Subject Groups:
+Classify each article into exactly ONE of the following Subject Groups:
+["Defence & Security", "Science & Technology", "Economy & Infrastructure", "Environment & Agriculture", "Polity & Governance", "International Relations", "Social Justice & Health", "Art & Culture"]
+
 Guidelines:
 1. Filter aggressively: Discard purely ceremonial speeches, protocol greetings, condolences, routine state government political visits, or minor routine transfers. Only mark RELEVANT if it has substantive value for UPSC CSE.
 2. If NOT relevant, set "is_relevant": false.
@@ -34,6 +38,7 @@ Guidelines:
    - "title_en": Title translated/refined in clear English.
    - "ministry_en": Ministry name in English (e.g. "Ministry of Ayush", "Vice President's Secretariat").
    - "gs_paper": One of ["GS-1", "GS-2", "GS-3", "GS-4", "Prelims Pointer"]
+   - "subject_group": One of ["Defence & Security", "Science & Technology", "Economy & Infrastructure", "Environment & Agriculture", "Polity & Governance", "International Relations", "Social Justice & Health", "Art & Culture"]
    - "short_summary": 60-80 words plain-English summary answering What, Why, and Key provisions.
    - "prelims_facts": 2-3 crisp bullet points in English with factual data.
    - "mains_pointer": 1 sentence in English explaining its dimension for Mains answer writing.
@@ -52,6 +57,7 @@ Respond ONLY with valid JSON in this exact structure (ENGLISH ONLY):
   "title_en": "Title in 100% English",
   "ministry_en": "Ministry name in 100% English",
   "gs_paper": "GS-1 / GS-2 / GS-3 / GS-4 / Prelims Pointer",
+  "subject_group": "Defence & Security / Science & Technology / Economy & Infrastructure / Environment & Agriculture / Polity & Governance / International Relations / Social Justice & Health / Art & Culture",
   "short_summary": "60 to 80 words crisp summary in English",
   "prelims_facts": "• Bullet 1\\n• Bullet 2 (English only)",
   "mains_pointer": "Significance for Mains answer writing (English only)"
@@ -147,16 +153,31 @@ class UPSCNewsAgent:
                 "mains_pointer": ""
             }
 
-        # GS classification heuristics
+        # GS & Subject classification heuristics
         gs_paper = "GS-3"
-        if any(w in text for w in ["constitution", "court", "election", "judiciary", "bilateral", "treaty", "parliament", "foreign"]):
-            gs_paper = "GS-2"
-        elif any(w in text for w in ["culture", "heritage", "monument", "tribal", "archaeological", "history"]):
-            gs_paper = "GS-1"
-        elif any(w in text for w in ["economy", "rbi", "inflation", "gdp", "space", "isro", "environment", "climate", "agriculture", "fertilizer"]):
+        subject_group = "Economy & Infrastructure"
+
+        if any(w in text for w in ["defence", "army", "navy", "air force", "missile", "drdo", "security", "border", "coast guard", "vindhyagiri", "iaf", "military"]):
             gs_paper = "GS-3"
-        elif any(w in text for w in ["ethics", "integrity", "vigilance", "anti-corruption"]):
-            gs_paper = "GS-4"
+            subject_group = "Defence & Security"
+        elif any(w in text for w in ["technology", "space", "isro", "ai", "nano", "spectral", "biotech", "scientific", "quantum", "csir"]):
+            gs_paper = "GS-3"
+            subject_group = "Science & Technology"
+        elif any(w in text for w in ["environment", "climate", "biodiversity", "forest", "wildlife", "pollution", "agriculture", "farmer", "fertilizer", "crop"]):
+            gs_paper = "GS-3"
+            subject_group = "Environment & Agriculture"
+        elif any(w in text for w in ["constitution", "court", "election", "judiciary", "parliament", "nhrc", "law", "governance", "suo motu"]):
+            gs_paper = "GS-2"
+            subject_group = "Polity & Governance"
+        elif any(w in text for w in ["bilateral", "treaty", "foreign", "iora", "un", "diplomatic", "summit", "ambassador", "multilateral"]):
+            gs_paper = "GS-2"
+            subject_group = "International Relations"
+        elif any(w in text for w in ["health", "hospital", "education", "sc and st", "tribal", "welfare", "pension", "scholarship", "disabled", "ayush"]):
+            gs_paper = "GS-2"
+            subject_group = "Social Justice & Health"
+        elif any(w in text for w in ["culture", "heritage", "monument", "sangamam", "kashi", "festival", "archaeological", "history"]):
+            gs_paper = "GS-1"
+            subject_group = "Art & Culture"
 
         # Generate a brief English summary snippet
         clean_content = "".join([c for c in content if ord(c) < 128])
@@ -169,13 +190,14 @@ class UPSCNewsAgent:
 
         return {
             "is_relevant": True,
-            "relevance_reason": f"Heuristic match on key administrative topics ({gs_paper}).",
+            "relevance_reason": f"Heuristic match on {subject_group} ({gs_paper}).",
             "title_en": clean_title,
             "ministry_en": clean_ministry,
             "gs_paper": gs_paper,
+            "subject_group": subject_group,
             "short_summary": summary_snippet,
-            "prelims_facts": f"• Nodal Ministry: {clean_ministry}\n• Topic: {clean_title}",
-            "mains_pointer": "Relevant for socio-economic policy and governance analysis."
+            "prelims_facts": f"• Nodal Ministry: {clean_ministry}\n• Focus: {subject_group}",
+            "mains_pointer": f"Relevant for {gs_paper} syllabus under {subject_group}."
         }
 
 if __name__ == "__main__":
