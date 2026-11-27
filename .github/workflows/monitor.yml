@@ -1,0 +1,43 @@
+name: 24/7 PIB UPSC Agent Monitor
+
+on:
+  schedule:
+    # Runs every 30 minutes for free on GitHub Actions
+    - cron: '*/30 * * * *'
+  workflow_dispatch: # Allows manual trigger from GitHub UI
+
+permissions:
+  contents: write
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install Dependencies
+        run: |
+          pip install -r requirements.txt
+
+      - name: Run PIB Ingestion & Agentic Evaluation
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          python -c "import main; main.run_pipeline()"
+
+      - name: Commit and push updated database
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "PIB-Bot"
+          git add pib_upsc.db
+          git commit -m "Auto-update PIB database [skip ci]" || echo "No changes to commit"
+          git push
