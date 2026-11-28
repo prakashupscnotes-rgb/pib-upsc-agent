@@ -247,9 +247,39 @@ class UPSCNewsAgent:
                 subject_group = "Polity & Governance"
                 sub_topic = "Polity"
 
-        # 3. Clean Title & Ministry (strip non-ASCII/Devanagari if any)
-        clean_title = re.sub(r"[\u0900-\u0d7f]", "", title).strip() or title.strip()
-        clean_ministry = re.sub(r"[\u0900-\u0d7f]", "", ministry).strip() or ministry.strip()
+        # 3. Clean Title & Ministry (Guarantee 100% English, proper casing, and no broken punctuation)
+        latin_letters = re.findall(r'[a-zA-Z]', title)
+        if len(latin_letters) >= 15 and title.strip() not in ['2026', ', ;', '()']:
+            clean_title = re.sub(r"[\u0900-\u0d7f]", "", title).strip()
+        else:
+            # Extract first substantive sentence from content
+            lines = [l.strip() for l in content.split('\n') if len(re.findall(r'[a-zA-Z]', l)) > 15]
+            if lines:
+                first_sent = re.split(r'\.|\n', lines[0])[0].strip()
+                clean_title = first_sent
+            else:
+                clean_title = "Government Policy & Current Affairs Update"
+
+        # Fix ALL CAPS titles to clean Title Case
+        if clean_title.isupper() and len(clean_title) > 20:
+            words = clean_title.split()
+            res_words = []
+            acronyms = {'PIB', 'UPSC', 'KEA', 'IORA', 'ISRO', 'DRDO', 'RBI', 'NHRC', 'UN', 'WTO', 'WHO', 'IMF', 'SC', 'ST', 'CBIC', 'NFRA', 'ISAM', 'PMKSY', 'IITF', 'IIT', 'WDC'}
+            for w in words:
+                w_strip = re.sub(r'[^a-zA-Z0-9]', '', w)
+                if w_strip.upper() in acronyms:
+                    res_words.append(w.upper())
+                else:
+                    res_words.append(w.capitalize())
+            clean_title = ' '.join(res_words)
+
+        clean_title = re.sub(r"[\u0900-\u0d7f]", "", clean_title).strip()
+        clean_title = re.sub(r'^[,\s;:–—\(\)\'\"]+|[,\s;:–—\(\)\'\"]+$', '', clean_title).strip()[:130]
+
+        clean_ministry = re.sub(r"[\u0900-\u0d7f]", "", ministry).strip()
+        if len(re.findall(r'[a-zA-Z]', clean_ministry)) < 4:
+            clean_ministry = "Government of India"
+        clean_ministry = re.sub(r'^[,\s;:–—\(\)\'\"]+|[,\s;:–—\(\)\'\"]+$', '', clean_ministry).strip()
 
         # 4. Generate High-Yield 60-80 Word Summary
         clean_content = re.sub(r"[\u0900-\u0d7f]", "", content).strip()

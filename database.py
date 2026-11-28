@@ -34,7 +34,8 @@ def init_db():
     for col, col_type in [
         ("subject_group", "TEXT DEFAULT 'General'"),
         ("main_pillar", "TEXT DEFAULT 'National'"),
-        ("sub_topic", "TEXT DEFAULT 'General'")
+        ("sub_topic", "TEXT DEFAULT 'General'"),
+        ("source_name", "TEXT DEFAULT 'PIB (Official)'")
     ]:
         try:
             c.execute(f"ALTER TABLE articles ADD COLUMN {col} {col_type}")
@@ -65,7 +66,8 @@ def save_article(
     mains_pointer: str = "",
     published_date: str = "",
     main_pillar: str = "National",
-    sub_topic: str = "General"
+    sub_topic: str = "General",
+    source_name: str = "PIB (Official)"
 ) -> int:
     conn = get_connection()
     c = conn.cursor()
@@ -74,8 +76,8 @@ def save_article(
             pib_id, title, ministry, link, raw_content,
             is_relevant, gs_paper, subject_group, short_summary,
             prelims_facts, mains_pointer, published_date,
-            main_pillar, sub_topic
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            main_pillar, sub_topic, source_name
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(pib_id) DO UPDATE SET
             is_relevant = excluded.is_relevant,
             gs_paper = excluded.gs_paper,
@@ -84,12 +86,13 @@ def save_article(
             prelims_facts = excluded.prelims_facts,
             mains_pointer = excluded.mains_pointer,
             main_pillar = excluded.main_pillar,
-            sub_topic = excluded.sub_topic
+            sub_topic = excluded.sub_topic,
+            source_name = excluded.source_name
     """, (
         pib_id, title, ministry, link, raw_content,
         1 if is_relevant else 0, gs_paper, subject_group, short_summary,
         prelims_facts, mains_pointer, published_date,
-        main_pillar, sub_topic
+        main_pillar, sub_topic, source_name
     ))
     conn.commit()
     inserted_id = c.lastrowid
@@ -122,12 +125,17 @@ def get_recent_articles(
     search_query: Optional[str] = None,
     pillar_filter: Optional[str] = None,
     sub_topic_filter: Optional[str] = None,
-    date_filter: Optional[str] = None
+    date_filter: Optional[str] = None,
+    source_filter: Optional[str] = None
 ) -> List[Dict]:
     conn = get_connection()
     c = conn.cursor()
     query = "SELECT * FROM articles WHERE is_relevant = 1"
     params = []
+
+    if source_filter and source_filter != "All Sources":
+        query += " AND source_name LIKE ?"
+        params.append(f"%{source_filter}%")
 
     if pillar_filter and pillar_filter != "All":
         query += " AND main_pillar LIKE ?"

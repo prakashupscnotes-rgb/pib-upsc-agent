@@ -238,6 +238,191 @@ class PIBScraper:
 
         return detailed_releases
 
+    def fetch_mann_ki_baat_episodes(self, limit: int = 3) -> List[Dict]:
+        """Fetches the latest Mann Ki Baat episodes & transcripts from PM India with YouTube references."""
+        episodes = []
+        try:
+            url = "https://www.pmindia.gov.in/en/mann-ki-baat/"
+            html = self._make_request(url)
+            if not html:
+                return episodes
+
+            soup = BeautifulSoup(html, "html.parser")
+            found = 0
+            for a in soup.find_all("a"):
+                txt = a.get_text(strip=True)
+                href = a.get("href", "")
+                if ("episode" in txt.lower() or "mann ki baat" in txt.lower()) and "news_updates" in href:
+                    full_link = href if href.startswith("http") else "https://www.pmindia.gov.in" + href
+                    ep_id = f"MKB_{abs(hash(full_link)) % 1000000}"
+                    
+                    # Fetch episode full content
+                    ep_html = self._make_request(full_link)
+                    content = ""
+                    yt_link = "https://www.youtube.com/results?search_query=mann+ki+baat+latest+episode"
+                    if ep_html:
+                        ep_soup = BeautifulSoup(ep_html, "html.parser")
+                        paras = [p.get_text(strip=True) for p in ep_soup.find_all("p") if len(p.get_text(strip=True)) > 40]
+                        content = "\n\n".join(paras[:15])
+                        # Look for embedded youtube link if present
+                        for iframe in ep_soup.find_all("iframe"):
+                            src = iframe.get("src", "")
+                            if "youtube.com" in src or "youtu.be" in src:
+                                yt_link = src
+                                break
+
+                    episodes.append({
+                        "pib_id": ep_id,
+                        "title": txt,
+                        "ministry": "Prime Minister's Office (PMO)",
+                        "link": full_link,
+                        "youtube_link": yt_link,
+                        "published_date": "Monthly Address",
+                        "content": content or txt,
+                        "source_name": "Mann Ki Baat (PM Address)"
+                    })
+                    found += 1
+                    if found >= limit:
+                        break
+        except Exception as e:
+            print(f"[Scraper] Error fetching Mann Ki Baat: {e}")
+
+        return episodes
+
+    def fetch_pm_india_updates(self, limit: int = 4) -> List[Dict]:
+        """Fetches PM visits, cabinet decisions, and bilateral summits from PM India official portal."""
+        updates = []
+        try:
+            url = "https://www.pmindia.gov.in/en/news-updates/"
+            html = self._make_request(url)
+            if not html:
+                return updates
+
+            soup = BeautifulSoup(html, "html.parser")
+            seen_links = set()
+            found = 0
+
+            for a in soup.find_all("a"):
+                href = a.get("href", "")
+                txt = a.get_text(strip=True)
+                if "/news_updates/" in href and len(txt) > 25 and href not in seen_links:
+                    seen_links.add(href)
+                    full_link = href if href.startswith("http") else "https://www.pmindia.gov.in" + href
+                    clean_id = f"PM_{abs(hash(full_link)) % 1000000}"
+
+                    # Quick fetch of article body
+                    item_html = self._make_request(full_link)
+                    content = ""
+                    if item_html:
+                        item_soup = BeautifulSoup(item_html, "html.parser")
+                        paras = [p.get_text(strip=True) for p in item_soup.find_all("p") if len(p.get_text(strip=True)) > 35]
+                        content = "\n\n".join(paras[:10])
+
+                    updates.append({
+                        "pib_id": clean_id,
+                        "title": txt,
+                        "ministry": "Prime Minister's Office (PMO)",
+                        "link": full_link,
+                        "published_date": "Official Release",
+                        "content": content or txt,
+                        "source_name": "PM India (Visits & Cabinet)"
+                    })
+                    found += 1
+                    if found >= limit:
+                        break
+        except Exception as e:
+            print(f"[Scraper] Error fetching PM India news updates: {e}")
+
+        return updates
+
+    def fetch_karnataka_news(self, limit: int = 4) -> List[Dict]:
+        """Fetches Karnataka state specific government policies, acts, and developments for KEA exams."""
+        karnataka_items = []
+        feed_url = "https://www.thehindu.com/news/national/karnataka/feeder/default.rss"
+        try:
+            raw_xml = self._make_request(feed_url)
+            if raw_xml:
+                import xml.etree.ElementTree as ET
+                root = ET.fromstring(raw_xml)
+                channel = root.find("channel")
+                if channel is not None:
+                    count = 0
+                    for item in channel.findall("item"):
+                        title = (item.findtext("title") or "Untitled").strip()
+                        link = (item.findtext("link") or "").strip()
+                        pub_date = (item.findtext("pubDate") or "").strip()
+                        desc = (item.findtext("description") or "").strip()
+                        clean_desc = re.sub(r"<[^>]+>", "", desc).strip()
+                        item_id = f"KAR_{abs(hash(link)) % 1000000}"
+
+                        karnataka_items.append({
+                            "pib_id": item_id,
+                            "title": title,
+                            "ministry": "Government of Karnataka",
+                            "link": link,
+                            "published_date": clean_date_string(pub_date),
+                            "content": clean_desc or title,
+                            "source_name": "Karnataka State News"
+                        })
+                        count += 1
+                        if count >= limit:
+                            break
+        except Exception as e:
+            print(f"[Scraper] Error fetching Karnataka news: {e}")
+
+        return karnataka_items
+
+    def fetch_reputed_newspapers(self, limit: int = 8) -> List[Dict]:
+        """Fetches national and policy news from The Hindu and The Indian Express RSS feeds."""
+        newspaper_items = []
+        feeds = [
+            ("The Hindu", "https://www.thehindu.com/news/national/feeder/default.rss"),
+            ("Indian Express", "https://indianexpress.com/section/india/feed/"),
+            ("The Hindu Editorial", "https://www.thehindu.com/opinion/editorial/feeder/default.rss")
+        ]
+
+        per_feed = max(2, limit // len(feeds))
+        for source_label, feed_url in feeds:
+            try:
+                raw_xml = self._make_request(feed_url)
+                if not raw_xml:
+                    continue
+
+                import xml.etree.ElementTree as ET
+                root = ET.fromstring(raw_xml)
+                channel = root.find("channel")
+                if channel is None:
+                    continue
+
+                count = 0
+                for item in channel.findall("item"):
+                    title = (item.findtext("title") or "Untitled").strip()
+                    link = (item.findtext("link") or "").strip()
+                    pub_date = (item.findtext("pubDate") or "").strip()
+                    desc = (item.findtext("description") or "").strip()
+
+                    # Clean html tags from description
+                    clean_desc = re.sub(r"<[^>]+>", "", desc).strip()
+                    item_id = f"NEWS_{abs(hash(link)) % 1000000}"
+
+                    newspaper_items.append({
+                        "pib_id": item_id,
+                        "title": title,
+                        "ministry": f"National Press ({source_label})",
+                        "link": link,
+                        "published_date": clean_date_string(pub_date),
+                        "content": clean_desc or title,
+                        "source_name": source_label
+                    })
+                    count += 1
+                    if count >= per_feed:
+                        break
+
+            except Exception as e:
+                print(f"[Scraper] Error fetching {source_label}: {e}")
+
+        return newspaper_items
+
 if __name__ == "__main__":
     scraper = PIBScraper()
     print("[Scraper] Checking for releases...")

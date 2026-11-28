@@ -22,8 +22,10 @@ class TelegramNotifier:
         """
         Formats article into a clean, readable Inshorts-style HTML card.
         """
+        source = html.escape(str(article.get("source_name", "PIB (Official)")))
+        pillar = html.escape(str(article.get("main_pillar", "National")))
+        sub_topic = html.escape(str(article.get("sub_topic", "General")))
         gs_paper = html.escape(str(article.get("gs_paper", "UPSC GS")))
-        subject_group = html.escape(str(article.get("subject_group", "General Affairs")))
         title = html.escape(str(article.get("title", "")))
         ministry = html.escape(str(article.get("ministry", "Government of India")))
         summary = html.escape(str(article.get("short_summary", "")))
@@ -34,8 +36,8 @@ class TelegramNotifier:
             link += "&lang=1" if "?" in link else "?lang=1"
 
         msg = (
-            f"🏛 <b>{gs_paper}</b> • <b>{subject_group}</b>\n"
-            f"🏢 <i>{ministry}</i>\n\n"
+            f"📡 <b>{source}</b> | 📁 <b>{pillar}</b> › <i>{sub_topic}</i>\n"
+            f"🏛 <b>{gs_paper}</b> • 🏢 <i>{ministry}</i>\n\n"
             f"📌 <b>{title}</b>\n\n"
             f"📝 <b>Short Summary:</b>\n{summary}\n\n"
         )
@@ -46,12 +48,13 @@ class TelegramNotifier:
         if mains and mains.strip():
             msg += f"💡 <b>Mains Dimension:</b>\n{mains}\n\n"
 
-        msg += f"🔗 <a href=\"{link}\">Click here to open PIB Release</a>"
+        msg += f"🔗 <a href=\"{link}\">Click here to open Full Article</a>"
         return msg
 
     def send_article(self, article: Dict[str, Any]) -> bool:
         """
-        Sends the article to Telegram channel or chat with an inline button.
+        Sends the article to Telegram channel(s) or chat(s) with an inline button.
+        Supports single ID, comma-separated IDs, or Channel (@channelname / -100...).
         """
         if not self.is_configured():
             print("[Telegram] Bot token or Chat ID not configured. Skipping telegram send.")
@@ -59,45 +62,47 @@ class TelegramNotifier:
 
         message_html = self.format_message(article)
         link = article.get("link", config.PIB_BASE_URL)
-
+        yt_link = article.get("youtube_link", "")
         url = f"https://api.telegram.org/bot{self.bot_token}/sendMessage"
-        payload = {
-            "chat_id": self.chat_id,
-            "text": message_html,
-            "parse_mode": "HTML",
-            "disable_web_page_preview": False,
-            "reply_markup": {
-                "inline_keyboard": [
-                    [
-                        {"text": "📖 Read Full PIB Article", "url": link}
-                    ]
-                ]
+
+        buttons = [
+            {"text": "📖 Read Official Article", "url": link}
+        ]
+        if yt_link and yt_link.strip():
+            buttons.append({"text": "▶️ Watch on YouTube", "url": yt_link})
+
+        chat_ids = [cid.strip() for cid in str(self.chat_id).split(",") if cid.strip()]
+        any_success = False
+
+        for cid in chat_ids:
+            payload = {
+                "chat_id": cid,
+                "text": message_html,
+                "parse_mode": "HTML",
+                "disable_web_page_preview": False,
+                "reply_markup": {
+                    "inline_keyboard": [buttons]
+                }
             }
-        }
 
-        try:
-            if REQUESTS_AVAILABLE:
-                response = requests.post(url, json=payload, timeout=10)
-                data = response.json()
-            else:
-                req_data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
-                req = urllib.request.Request(
-                    url,
-                    data=req_data,
-                    headers={"Content-Type": "application/json"}
-                )
-                with urllib.request.urlopen(req, timeout=10) as resp:
-                    data = json.loads(resp.read().decode("utf-8"))
+            try:
+                if REQUESTS_AVAILABLE:
+                    response = requests.post(url, json=payload, timeout=10)
+                    if response.status_code == 200:
+                        any_success = True
+                    else:
+                        print(f"[Telegram] Failed to send to {cid}: {response.text}")
+                else:
+                    import urllib.request
+                    data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+                    req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
+                    with urllib.request.urlopen(req, timeout=10) as resp:
+                        if resp.status == 200:
+                            any_success = True
+            except Exception as e:
+                print(f"[Telegram] Error sending to {cid}: {e}")
 
-            if data.get("ok"):
-                print(f"[Telegram] Successfully posted: {article.get('title')[:40]}...")
-                return True
-            else:
-                print(f"[Telegram] Failed to send message: {data.get('description')}")
-                return False
-        except Exception as e:
-            print(f"[Telegram] Error sending message: {e}")
-            return False
+        return any_success
 
 if __name__ == "__main__":
     notifier = TelegramNotifier()
