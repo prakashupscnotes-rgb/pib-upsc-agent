@@ -1,6 +1,6 @@
 import sqlite3
 from datetime import datetime
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Any
 import config
 
 def get_connection():
@@ -30,11 +30,16 @@ def init_db():
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
-    # Add subject_group column if upgrading existing database
-    try:
-        c.execute("ALTER TABLE articles ADD COLUMN subject_group TEXT DEFAULT 'General'")
-    except Exception:
-        pass
+    # Add columns if upgrading existing database
+    for col, col_type in [
+        ("subject_group", "TEXT DEFAULT 'General'"),
+        ("main_pillar", "TEXT DEFAULT 'National'"),
+        ("sub_topic", "TEXT DEFAULT 'General'")
+    ]:
+        try:
+            c.execute(f"ALTER TABLE articles ADD COLUMN {col} {col_type}")
+        except Exception:
+            pass
     conn.commit()
     conn.close()
 
@@ -58,7 +63,9 @@ def save_article(
     short_summary: str = "",
     prelims_facts: str = "",
     mains_pointer: str = "",
-    published_date: str = ""
+    published_date: str = "",
+    main_pillar: str = "National",
+    sub_topic: str = "General"
 ) -> int:
     conn = get_connection()
     c = conn.cursor()
@@ -66,19 +73,23 @@ def save_article(
         INSERT INTO articles (
             pib_id, title, ministry, link, raw_content,
             is_relevant, gs_paper, subject_group, short_summary,
-            prelims_facts, mains_pointer, published_date
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            prelims_facts, mains_pointer, published_date,
+            main_pillar, sub_topic
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(pib_id) DO UPDATE SET
             is_relevant = excluded.is_relevant,
             gs_paper = excluded.gs_paper,
             subject_group = excluded.subject_group,
             short_summary = excluded.short_summary,
             prelims_facts = excluded.prelims_facts,
-            mains_pointer = excluded.mains_pointer
+            mains_pointer = excluded.mains_pointer,
+            main_pillar = excluded.main_pillar,
+            sub_topic = excluded.sub_topic
     """, (
         pib_id, title, ministry, link, raw_content,
         1 if is_relevant else 0, gs_paper, subject_group, short_summary,
-        prelims_facts, mains_pointer, published_date
+        prelims_facts, mains_pointer, published_date,
+        main_pillar, sub_topic
     ))
     conn.commit()
     inserted_id = c.lastrowid
@@ -108,12 +119,23 @@ def get_recent_articles(
     limit: int = 50,
     gs_filter: Optional[str] = None,
     subject_filter: Optional[str] = None,
-    search_query: Optional[str] = None
+    search_query: Optional[str] = None,
+    pillar_filter: Optional[str] = None,
+    sub_topic_filter: Optional[str] = None,
+    date_filter: Optional[str] = None
 ) -> List[Dict]:
     conn = get_connection()
     c = conn.cursor()
     query = "SELECT * FROM articles WHERE is_relevant = 1"
     params = []
+
+    if pillar_filter and pillar_filter != "All":
+        query += " AND main_pillar LIKE ?"
+        params.append(f"%{pillar_filter}%")
+
+    if sub_topic_filter and sub_topic_filter != "All":
+        query += " AND sub_topic LIKE ?"
+        params.append(f"%{sub_topic_filter}%")
 
     if gs_filter and gs_filter != "All":
         query += " AND gs_paper LIKE ?"
@@ -123,10 +145,14 @@ def get_recent_articles(
         query += " AND subject_group LIKE ?"
         params.append(f"%{subject_filter}%")
 
+    if date_filter:
+        query += " AND published_date LIKE ?"
+        params.append(f"%{date_filter}%")
+
     if search_query:
-        query += " AND (title LIKE ? OR short_summary LIKE ? OR ministry LIKE ? OR subject_group LIKE ?)"
+        query += " AND (title LIKE ? OR short_summary LIKE ? OR ministry LIKE ? OR subject_group LIKE ? OR sub_topic LIKE ?)"
         term = f"%{search_query}%"
-        params.extend([term, term, term, term])
+        params.extend([term, term, term, term, term])
 
     query += " ORDER BY id DESC LIMIT ?"
     params.append(limit * 2)
@@ -148,6 +174,26 @@ def get_recent_articles(
             break
 
     return clean_articles
+
+def get_dashboard_stats() -> Dict[str, Any]:
+    """Returns analytics for visual charts on the dashboard."""
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute("SELECT main_pillar, COUNT(*) FROM articles WHERE is_relevant = 1 GROUP BY main_pillar")
+    pillar_counts = dict(c.fetchall())
+
+    c.execute("SELECT gs_paper, COUNT(*) FROM articles WHERE is_relevant = 1 GROUP BY gs_paper")
+    gs_counts = dict(c.fetchall())
+
+    c.execute("SELECT subject_group, COUNT(*) FROM articles WHERE is_relevant = 1 GROUP BY subject_group")
+    subject_counts = dict(c.fetchall())
+
+    conn.close()
+    return {
+        "pillars": pillar_counts,
+        "gs_papers": gs_counts,
+        "subjects": subject_counts
+    }
 
 if __name__ == "__main__":
     init_db()

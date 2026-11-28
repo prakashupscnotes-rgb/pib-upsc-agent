@@ -143,49 +143,109 @@ class UPSCNewsAgent:
                 "mains_pointer": ""
             }
 
-        # 2. Strict GS Paper & Subject Group Mapping
+        # 2. Strict GS Paper & Pillar / Sub-Topic Mapping (Aligned with KEA & UPSC syllabus)
         gs_paper = "GS-2"
         subject_group = "Polity & Governance"
+        main_pillar = "National"
+        sub_topic = "Polity"
 
-        # Defence & Security -> GS-3
-        if self._has_keyword(text, ["defence", "army", "navy", "air force", "missile", "drdo", "frigate", "vindhyagiri", "iaf", "military", "border", "coast guard", "weapon", "warship"]):
-            gs_paper = "GS-3"
-            subject_group = "Defence & Security"
-
-        # Social Justice & Health -> GS-2
-        elif self._has_keyword(text, ["ambedkar", "medical aid", "health", "hospital", "patient", "disease", "tuberculosis", "tb", "sc and st", "scheduled caste", "tribal", "welfare", "disability", "disabilities", "poverty", "education", "nutrition", "samajik"]):
+        # Check for Karnataka State Specific News
+        if self._has_keyword(text, ["karnataka", "bengaluru", "bangalore", "mysuru", "belagavi", "dharwad", "kpsc", "kea"]):
+            main_pillar = "Karnataka"
+            if self._has_keyword(text, ["act", "bill", "amendment", "legislation"]):
+                sub_topic = "Acts (2026)"
+            elif self._has_keyword(text, ["commission", "board", "tribunal", "authority", "council"]):
+                sub_topic = "Statutory Bodies"
+            elif self._has_keyword(text, ["yojana", "scheme", "bhagya", "subsidy"]):
+                sub_topic = "Schemes"
+            elif self._has_keyword(text, ["policy"]):
+                sub_topic = "Policy"
+            elif self._has_keyword(text, ["app", "portal", "website", "digital", "online"]):
+                sub_topic = "Apps & Portals"
+            else:
+                sub_topic = "Programmes & Campaigns"
             gs_paper = "GS-2"
-            subject_group = "Social Justice & Health"
+            subject_group = "Polity & Governance"
 
-        # Science & Technology -> GS-3
-        elif self._has_keyword(text, ["isro", "space", "quantum", "spectral ct", "ct facility", "biotechnology", "csir", "semiconductor", "artificial intelligence", "satellite", "cyber", "supercomputing"]):
-            gs_paper = "GS-3"
-            subject_group = "Science & Technology"
-
-        # Environment & Agriculture -> GS-3
-        elif self._has_keyword(text, ["environment", "climate", "forest", "wildlife", "pollution", "agriculture", "farmer", "fertilizer", "crop", "biodiversity", "renewable", "solar", "emission"]):
-            gs_paper = "GS-3"
-            subject_group = "Environment & Agriculture"
-
-        # International Relations -> GS-2
-        elif self._has_keyword(text, ["iora", "bilateral", "treaty", "foreign ministers", "summit", "ambassador", "multilateral", "un", "asean", "g20", "quad", "diplomatic", "mahasagar", "sagar"]):
+        # Check for International Affairs
+        elif self._has_keyword(text, ["iora", "bilateral", "treaty", "foreign ministers", "summit", "ambassador", "multilateral", "un", "asean", "g20", "quad", "brics", "diplomatic", "mahasagar", "sagar", "wto", "who", "imf", "world bank"]):
+            main_pillar = "International"
+            if self._has_keyword(text, ["g20", "quad", "brics", "iora", "asean", "sco", "bimstec", "grouping"]):
+                sub_topic = "I. Groupings"
+            elif self._has_keyword(text, ["un", "wto", "who", "imf", "world bank", "unesco", "unicef", "organisation"]):
+                sub_topic = "I. Organisations"
+            elif self._has_keyword(text, ["summit", "conference", "council of ministers", "convention"]):
+                sub_topic = "I. Summit"
+            else:
+                sub_topic = "Mapping (Places in News)"
             gs_paper = "GS-2"
             subject_group = "International Relations"
 
-        # Economy & Infrastructure -> GS-3
-        elif self._has_keyword(text, ["gdp", "rbi", "inflation", "railways", "highway", "port", "trade", "export", "import", "fiscal", "tax", "gst", "logistics", "msme", "banking", "finance"]):
+        # Check for Miscellaneous (Sports, Awards, Committees, Reports, Persons)
+        elif self._has_keyword(text, ["sport", "medal", "cricket", "olympic", "champion", "award", "prize", "padma", "committee", "panel", "index", "ranking", "report", "demise", "passes away", "author", "book"]):
+            main_pillar = "Miscellaneous"
+            if self._has_keyword(text, ["sport", "medal", "cricket", "olympic", "champion"]):
+                sub_topic = "Sports"
+            elif self._has_keyword(text, ["award", "prize", "padma", "felicitation"]):
+                sub_topic = "Awards"
+            elif self._has_keyword(text, ["committee", "panel", "task force"]):
+                sub_topic = "Committees"
+            elif self._has_keyword(text, ["index", "ranking", "report"]):
+                sub_topic = "Reports and Index"
+            elif self._has_keyword(text, ["demise", "condoles", "passes away"]):
+                sub_topic = "Demise"
+            elif self._has_keyword(text, ["book", "author", "releases book"]):
+                sub_topic = "Books & Authors"
+            else:
+                sub_topic = "Persons in News"
+            gs_paper = "Prelims Pointer"
+            subject_group = "General"
+
+        # Check for Static Corner (Budgets, Economic Survey, Major Schemes)
+        elif self._has_keyword(text, ["budget", "economic survey", "pm-pranam", "ayushman bharat", "pm-kisan", "jal jeevan", "pradhan mantri"]):
+            main_pillar = "Static"
+            if "karnataka" in text and "budget" in text:
+                sub_topic = "Karnataka Budget"
+            elif "karnataka" in text and "survey" in text:
+                sub_topic = "Karnataka Economic Survey"
+            elif "karnataka" in text:
+                sub_topic = "Karnataka Schemes"
+            else:
+                sub_topic = "Central Schemes"
             gs_paper = "GS-3"
             subject_group = "Economy & Infrastructure"
 
-        # Art & Culture -> GS-1
-        elif self._has_keyword(text, ["heritage", "culture", "monument", "asi", "archaeological", "kashi", "sangamam", "festival", "classical dance", "temple", "manuscript", "sahitya"]):
-            gs_paper = "GS-1"
-            subject_group = "Art & Culture"
-
-        # Polity & Governance -> GS-2
-        elif self._has_keyword(text, ["nhrc", "constitution", "court", "judiciary", "election", "parliament", "suo motu", "law", "commission", "rights", "ordinance", "governance", "cabinet"]):
-            gs_paper = "GS-2"
-            subject_group = "Polity & Governance"
+        # National Categories
+        else:
+            main_pillar = "National"
+            if self._has_keyword(text, ["defence", "army", "navy", "air force", "missile", "drdo", "frigate", "vindhyagiri", "iaf", "military", "border", "coast guard"]):
+                gs_paper = "GS-3"
+                subject_group = "Defence & Security"
+                sub_topic = "Defence & Security"
+            elif self._has_keyword(text, ["isro", "space", "quantum", "spectral ct", "ct facility", "biotechnology", "csir", "semiconductor", "artificial intelligence"]):
+                gs_paper = "GS-3"
+                subject_group = "Science & Technology"
+                sub_topic = "Science & Tech"
+            elif self._has_keyword(text, ["environment", "climate", "forest", "wildlife", "pollution", "agriculture", "farmer", "crop", "biodiversity", "renewable"]):
+                gs_paper = "GS-3"
+                subject_group = "Environment & Agriculture"
+                sub_topic = "Environment"
+            elif self._has_keyword(text, ["gdp", "rbi", "inflation", "railways", "highway", "port", "trade", "tax", "gst", "logistics", "msme", "banking", "finance"]):
+                gs_paper = "GS-3"
+                subject_group = "Economy & Infrastructure"
+                sub_topic = "Economy"
+            elif self._has_keyword(text, ["heritage", "culture", "monument", "asi", "archaeological", "kashi", "sangamam", "festival"]):
+                gs_paper = "GS-1"
+                subject_group = "Art & Culture"
+                sub_topic = "History & Culture"
+            elif self._has_keyword(text, ["ambedkar", "health", "hospital", "patient", "disease", "tuberculosis", "tb", "sc and st", "scheduled caste", "tribal", "welfare", "disability"]):
+                gs_paper = "GS-2"
+                subject_group = "Social Justice & Health"
+                sub_topic = "Health & Society"
+            else:
+                gs_paper = "GS-2"
+                subject_group = "Polity & Governance"
+                sub_topic = "Polity"
 
         # 3. Clean Title & Ministry (strip non-ASCII/Devanagari if any)
         clean_title = re.sub(r"[\u0900-\u0d7f]", "", title).strip() or title.strip()
@@ -248,6 +308,8 @@ class UPSCNewsAgent:
             "ministry_en": clean_ministry,
             "gs_paper": gs_paper,
             "subject_group": subject_group,
+            "main_pillar": main_pillar,
+            "sub_topic": sub_topic,
             "short_summary": summary_text,
             "prelims_facts": prelims_str,
             "mains_pointer": mains_dimension
