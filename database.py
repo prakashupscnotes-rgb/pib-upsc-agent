@@ -196,11 +196,16 @@ def get_dashboard_stats() -> Dict[str, Any]:
     c.execute("SELECT subject_group, COUNT(*) FROM articles WHERE is_relevant = 1 GROUP BY subject_group")
     subject_counts = dict(c.fetchall())
 
+    c.execute("SELECT ministry, COUNT(*) FROM articles WHERE is_relevant = 1 GROUP BY ministry ORDER BY COUNT(*) DESC LIMIT 8")
+    ministry_counts = dict(c.fetchall())
+
     conn.close()
     return {
         "pillars": pillar_counts,
         "gs_papers": gs_counts,
-        "subjects": subject_counts
+        "subjects": subject_counts,
+        "ministries": ministry_counts,
+        "top_ministries": ministry_counts
     }
 
 if __name__ == "__main__":
