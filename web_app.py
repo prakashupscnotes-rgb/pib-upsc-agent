@@ -56,6 +56,29 @@ st.markdown("""
 # Ensure database exists
 database.init_db()
 
+# Start 24/7 Cloud Background Monitor (Runs continuously on Render even when laptop is off)
+import threading
+import time
+
+def start_cloud_background_monitor():
+    def monitor_loop():
+        time.sleep(10)  # Initial grace period on startup
+        try:
+            import main
+            while True:
+                main.run_pipeline()
+                time.sleep(1800)  # Run every 30 minutes
+        except Exception as ex:
+            print(f"[Cloud Background Monitor] Notice: {ex}")
+
+    if not hasattr(st, "_pib_cloud_monitor_started"):
+        st._pib_cloud_monitor_started = True
+        worker = threading.Thread(target=monitor_loop, daemon=True, name="PIBCloudWorker")
+        worker.start()
+        print("[Cloud] 24/7 Background PIB monitor worker started!")
+
+start_cloud_background_monitor()
+
 # Initialize session state for active filters
 if "selected_subject" not in st.session_state:
     st.session_state["selected_subject"] = "All Subjects"
@@ -141,21 +164,17 @@ if st.sidebar.button("🔄 Check & Fetch Latest PIB News", use_container_width=T
         except Exception as e:
             st.sidebar.warning(f"Live fetch notice: {e}")
 
-# 1-Click Auto-Sync to GitHub
-import sync_github
-gh_token = sync_github.get_github_token()
+# 1-Click Auto-Sync to GitHub (Optional for local development)
+try:
+    import sync_github
+    gh_token = sync_github.get_github_token()
+    HAS_SYNC = True
+except ImportError:
+    gh_token = ""
+    HAS_SYNC = False
 
-with st.sidebar.expander("☁️ Auto-Sync to GitHub", expanded=not bool(gh_token)):
-    if not gh_token:
-        st.caption("Paste your GitHub Personal Access Token to enable 1-click automatic cloud sync:")
-        user_token_input = st.text_input("GitHub Token (starts with ghp_)", type="password", key="input_gh_token")
-        if st.button("💾 Save & Connect", use_container_width=True):
-            if user_token_input.strip():
-                with open(".env", "a", encoding="utf-8") as env_f:
-                    env_f.write(f"\nGITHUB_TOKEN={user_token_input.strip()}\n")
-                st.success("Connected to GitHub! All future updates will sync automatically.")
-                st.rerun()
-    else:
+if HAS_SYNC and gh_token:
+    with st.sidebar.expander("☁️ Auto-Sync to GitHub", expanded=False):
         st.caption("Connected to `prakashupscnotes-rgb/pib-upsc-agent`")
         if st.button("🚀 Push All Updates to GitHub", use_container_width=True):
             with st.spinner("Syncing all code, database & fixes to GitHub..."):
@@ -198,12 +217,12 @@ st.session_state["selected_gs"] = gs_choice
 
 search_term = st.sidebar.text_input("Search Topics / Ministry", placeholder="e.g. DRDO, ISRO, RBI, Health...")
 
-# Mobile Device Access Pill in Sidebar
+# Global Device Access Pill in Sidebar
 st.sidebar.markdown("---")
-st.sidebar.markdown("📱 **Open on Mobile / Any Device:**")
-st.sidebar.info("""
-Connect your phone to the same Wi-Fi and open:  
-**`http://192.168.1.167:8505`**
+st.sidebar.markdown("📱 **Live Cloud Access (Any Device / Internet):**")
+st.sidebar.success("""
+Open anywhere on mobile, tablet, or PC:  
+👉 **`https://pib-upsc-agent.onrender.com`**
 """)
 
 # Main Content Area
