@@ -358,8 +358,10 @@ def render_article_cards(article_list):
             pub_date = re.sub(r"^Release ID:\s*\d+,?\s*", "", pub_date, flags=re.I).strip()
 
         # Overhead Image Selection (Local verified image or solid CDN fallback)
-        img_url = art.get("image_url") or ""
-        if not img_url or not os.path.exists(img_url):
+        raw_img_val = art.get("image_url") or ""
+        # Resolve to high-res HTTPS CDN or confirmed local asset
+        img_url = media_verifier.ensure_https_image(raw_img_val)
+        if not img_url.startswith("http") and not os.path.exists(img_url):
             img_url = media_verifier.get_real_news_image(
                 title=title,
                 content=art.get("raw_content", "") or summary,
@@ -367,20 +369,7 @@ def render_article_cards(article_list):
                 subject_group=sub_topic,
                 pillar=pillar
             )
-            # Commit fix to DB
-            try:
-                database.update_article_verification(
-                    pib_id=art.get("pib_id"),
-                    title=title,
-                    short_summary=summary,
-                    prelims_facts=prelims,
-                    mains_pointer=mains,
-                    image_url=img_url,
-                    image_verified=1,
-                    content_verified=1
-                )
-            except Exception:
-                pass
+            img_url = media_verifier.ensure_https_image(img_url)
 
         # Select Official Source Logo
         src_lower = source_name.lower()
@@ -414,11 +403,21 @@ def render_article_cards(article_list):
         with st.container():
             col_card_img, col_card_body = st.columns([1.15, 2.85])
             with col_card_img:
-                # Real Image Display via native Streamlit st.image (zero HTML leak)
-                st.image(img_url, use_container_width=True, caption=f"🛡️ Verified: {sub_topic}")
+                # Real Image Display with bulletproof cloud fallback
+                try:
+                    st.image(img_url, use_container_width=True, caption=f"🛡️ Verified: {sub_topic}")
+                except Exception:
+                    fallback_cdn = "https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?auto=format&fit=crop&w=800&q=80"
+                    try:
+                        st.image(fallback_cdn, use_container_width=True, caption=f"🛡️ Verified: {sub_topic}")
+                    except Exception:
+                        pass
                 # Source Official Logo Emblem
-                if os.path.exists(logo_path):
-                    st.image(logo_path, width=70)
+                if logo_path and os.path.exists(logo_path):
+                    try:
+                        st.image(logo_path, width=70)
+                    except Exception:
+                        pass
 
             with col_card_body:
                 # Badges

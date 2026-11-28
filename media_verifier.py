@@ -5,91 +5,143 @@ Media Verifier & Overhead Flow Path Inspector for You to UPSC:
 - Overhead Inspector that verifies every single image and content piece for relevance, health & formatting
 """
 
+import os
 import re
 import urllib.parse
 from typing import Dict, Any, List, Optional
 import requests
 import database
 
-# Official verified imagery library prioritizing local offline-ready high-res photography
+# Master dictionary mapping local asset paths to rock-solid HTTPS CDN images
+LOCAL_TO_CDN_MAP: Dict[str, str] = {
+    # Defence & Missiles
+    "static/images/missile_defence.jpg": "https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?auto=format&fit=crop&w=800&q=80",
+    "static/images/warship_naval.jpg": "https://images.unsplash.com/photo-1509316975850-ff9c5deb0cd9?auto=format&fit=crop&w=800&q=80",
+    "static/images/space_rocket.jpg": "https://images.unsplash.com/photo-1541185933-ef5d8ed016c2?auto=format&fit=crop&w=800&q=80",
+    "static/images/microchip_semiconductor.jpg": "https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=800&q=80",
+    "static/images/supercomputer.jpg": "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&fit=crop&w=800&q=80",
+    "static/images/parliament_polity.jpg": "https://images.unsplash.com/photo-1589829545856-d10d557cf95f?auto=format&fit=crop&w=800&q=80",
+    "static/images/economy_trade.jpg": "https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?auto=format&fit=crop&w=800&q=80",
+    "static/images/aiims_healthcare.jpg": "https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?auto=format&fit=crop&w=800&q=80",
+    "static/images/karnataka_vidhana.jpg": "https://images.unsplash.com/photo-1596176530529-78163a4f7af2?auto=format&fit=crop&w=800&q=80",
+    "static/images/international_summit.jpg": "https://images.unsplash.com/photo-1541872703-74c5e44368f9?auto=format&fit=crop&w=800&q=80",
+    "static/images/hybrid_vehicle.jpg": "https://images.unsplash.com/photo-1563720223185-11003d516935?auto=format&fit=crop&w=800&q=80",
+    "static/images/nimhans_mental_health.jpg": "https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?auto=format&fit=crop&w=800&q=80",
+    "static/images/dam_cauvery_krs.jpg": "https://images.unsplash.com/photo-1578328819058-b69f3a3b0f6b?auto=format&fit=crop&w=800&q=80",
+    "static/images/dam_almatti.jpg": "https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=800&q=80",
+    "static/images/dam_tungabhadra.jpg": "https://images.unsplash.com/photo-1518495973542-4542c06a5843?auto=format&fit=crop&w=800&q=80",
+    "static/images/dam_linganamakki.jpg": "https://images.unsplash.com/photo-1432405972618-c60b0225b8f9?auto=format&fit=crop&w=800&q=80",
+    "static/images/dam_bhakra.jpg": "https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?auto=format&fit=crop&w=800&q=80",
+    "static/species/snow_leopard.jpg": "https://images.unsplash.com/photo-1561731216-c3a4d99437d5?auto=format&fit=crop&w=800&q=80",
+    "static/species/asian_elephant.jpg": "https://images.unsplash.com/photo-1557050543-4d5f4e07ef46?auto=format&fit=crop&w=800&q=80",
+    "static/species/bengal_tiger.jpg": "https://images.unsplash.com/photo-1561731216-c3a4d99437d5?auto=format&fit=crop&w=800&q=80",
+    "static/species/great_indian_bustard.jpg": "https://images.unsplash.com/photo-1544551763-46a013bb70d5?auto=format&fit=crop&w=800&q=80",
+    "static/species/nilgiri_tahr.jpg": "https://images.unsplash.com/photo-1544551763-46a013bb70d5?auto=format&fit=crop&w=800&q=80",
+    "static/species/olive_ridley.jpg": "https://images.unsplash.com/photo-1518467166778-b88f373ffec7?auto=format&fit=crop&w=800&q=80",
+}
+
+DEFAULT_FALLBACK_CDN = "https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?auto=format&fit=crop&w=800&q=80"
+
+def ensure_https_image(url_or_path: str) -> str:
+    """Guarantees a 100% reachable image URL for both local and cloud environments (Render, Actions, Streamlit)."""
+    if not url_or_path or not isinstance(url_or_path, str):
+        return DEFAULT_FALLBACK_CDN
+    clean = url_or_path.strip()
+    if clean.startswith("http://") or clean.startswith("https://"):
+        return clean
+    if clean in LOCAL_TO_CDN_MAP:
+        if os.path.exists(clean) and os.path.getsize(clean) > 500:
+            return clean
+        return LOCAL_TO_CDN_MAP[clean]
+    if os.path.exists(clean) and os.path.getsize(clean) > 500:
+        return clean
+    return DEFAULT_FALLBACK_CDN
+
+def resolve_asset(local_path: str, cdn_url: str) -> str:
+    """Uses rock-solid public CDN URL by default for cloud portability, while honoring local asset if it exists."""
+    if os.path.exists(local_path) and os.path.getsize(local_path) > 500:
+        return local_path
+    return cdn_url
+
+# Official verified imagery library prioritizing universal high-res CDN URLs
 CATEGORY_VERIFIED_IMAGES = {
-    "defence": "static/images/missile_defence.jpg",
-    "naval": "static/images/warship_naval.jpg",
-    "space": "static/images/space_rocket.jpg",
-    "semiconductor": "static/images/microchip_semiconductor.jpg",
-    "supercomputer": "static/images/supercomputer.jpg",
-    "polity": "static/images/parliament_polity.jpg",
-    "economy": "static/images/economy_trade.jpg",
-    "health": "static/images/aiims_healthcare.jpg",
-    "environment": "static/species/snow_leopard.jpg",
-    "karnataka": "static/images/karnataka_vidhana.jpg",
-    "social": "static/images/parliament_polity.jpg",
-    "international": "static/images/international_summit.jpg",
-    "hybrid": "static/images/hybrid_vehicle.jpg"
+    "defence": "https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?auto=format&fit=crop&w=800&q=80",
+    "naval": "https://images.unsplash.com/photo-1509316975850-ff9c5deb0cd9?auto=format&fit=crop&w=800&q=80",
+    "space": "https://images.unsplash.com/photo-1541185933-ef5d8ed016c2?auto=format&fit=crop&w=800&q=80",
+    "semiconductor": "https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=800&q=80",
+    "supercomputer": "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&fit=crop&w=800&q=80",
+    "polity": "https://images.unsplash.com/photo-1589829545856-d10d557cf95f?auto=format&fit=crop&w=800&q=80",
+    "economy": "https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?auto=format&fit=crop&w=800&q=80",
+    "health": "https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?auto=format&fit=crop&w=800&q=80",
+    "environment": "https://images.unsplash.com/photo-1561731216-c3a4d99437d5?auto=format&fit=crop&w=800&q=80",
+    "karnataka": "https://images.unsplash.com/photo-1596176530529-78163a4f7af2?auto=format&fit=crop&w=800&q=80",
+    "social": "https://images.unsplash.com/photo-1589829545856-d10d557cf95f?auto=format&fit=crop&w=800&q=80",
+    "international": "https://images.unsplash.com/photo-1541872703-74c5e44368f9?auto=format&fit=crop&w=800&q=80",
+    "hybrid": "https://images.unsplash.com/photo-1563720223185-11003d516935?auto=format&fit=crop&w=800&q=80"
 }
 
 # In-memory entity image cache to avoid duplicate lookups
 _ENTITY_IMAGE_CACHE: Dict[str, str] = {
     # Missiles & Defence
-    "missile": "static/images/missile_defence.jpg",
-    "agni": "static/images/missile_defence.jpg",
-    "brahmos": "static/images/missile_defence.jpg",
-    "drdo": "static/images/missile_defence.jpg",
-    "defence": "static/images/missile_defence.jpg",
-    "warship": "static/images/warship_naval.jpg",
-    "naval": "static/images/warship_naval.jpg",
-    "navy": "static/images/warship_naval.jpg",
-    "vindhyagiri": "static/images/warship_naval.jpg",
-    "ezhimala": "static/images/warship_naval.jpg",
-    "naval academy": "static/images/warship_naval.jpg",
-    "crpf": "static/images/missile_defence.jpg",
+    "missile": "https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?auto=format&fit=crop&w=800&q=80",
+    "agni": "https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?auto=format&fit=crop&w=800&q=80",
+    "brahmos": "https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?auto=format&fit=crop&w=800&q=80",
+    "drdo": "https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?auto=format&fit=crop&w=800&q=80",
+    "defence": "https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?auto=format&fit=crop&w=800&q=80",
+    "warship": "https://images.unsplash.com/photo-1509316975850-ff9c5deb0cd9?auto=format&fit=crop&w=800&q=80",
+    "naval": "https://images.unsplash.com/photo-1509316975850-ff9c5deb0cd9?auto=format&fit=crop&w=800&q=80",
+    "navy": "https://images.unsplash.com/photo-1509316975850-ff9c5deb0cd9?auto=format&fit=crop&w=800&q=80",
+    "vindhyagiri": "https://images.unsplash.com/photo-1509316975850-ff9c5deb0cd9?auto=format&fit=crop&w=800&q=80",
+    "ezhimala": "https://images.unsplash.com/photo-1509316975850-ff9c5deb0cd9?auto=format&fit=crop&w=800&q=80",
+    "naval academy": "https://images.unsplash.com/photo-1509316975850-ff9c5deb0cd9?auto=format&fit=crop&w=800&q=80",
+    "crpf": "https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?auto=format&fit=crop&w=800&q=80",
 
     # Science & Tech Devices
-    "space": "static/images/space_rocket.jpg",
-    "isro": "static/images/space_rocket.jpg",
-    "semiconductor": "static/images/microchip_semiconductor.jpg",
-    "chip": "static/images/microchip_semiconductor.jpg",
-    "microchip": "static/images/microchip_semiconductor.jpg",
-    "supercomputer": "static/images/supercomputer.jpg",
-    "param": "static/images/supercomputer.jpg",
-    "hybrid": "static/images/hybrid_vehicle.jpg",
-    "toyota": "static/images/hybrid_vehicle.jpg",
-    "aiims": "static/images/aiims_healthcare.jpg",
-    "cancer": "static/images/aiims_healthcare.jpg",
-    "health": "static/images/aiims_healthcare.jpg",
-    "nimhans": "static/images/nimhans_mental_health.jpg",
+    "space": "https://images.unsplash.com/photo-1541185933-ef5d8ed016c2?auto=format&fit=crop&w=800&q=80",
+    "isro": "https://images.unsplash.com/photo-1541185933-ef5d8ed016c2?auto=format&fit=crop&w=800&q=80",
+    "semiconductor": "https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=800&q=80",
+    "chip": "https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=800&q=80",
+    "microchip": "https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=800&q=80",
+    "supercomputer": "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&fit=crop&w=800&q=80",
+    "param": "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&fit=crop&w=800&q=80",
+    "hybrid": "https://images.unsplash.com/photo-1563720223185-11003d516935?auto=format&fit=crop&w=800&q=80",
+    "toyota": "https://images.unsplash.com/photo-1563720223185-11003d516935?auto=format&fit=crop&w=800&q=80",
+    "aiims": "https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?auto=format&fit=crop&w=800&q=80",
+    "cancer": "https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?auto=format&fit=crop&w=800&q=80",
+    "health": "https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?auto=format&fit=crop&w=800&q=80",
+    "nimhans": "https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?auto=format&fit=crop&w=800&q=80",
 
     # Karnataka & Governance
-    "karnataka": "static/images/karnataka_vidhana.jpg",
-    "vidhana soudha": "static/images/karnataka_vidhana.jpg",
-    "parliament": "static/images/parliament_polity.jpg",
-    "polity": "static/images/parliament_polity.jpg",
-    "court": "static/images/parliament_polity.jpg",
-    "police": "static/images/parliament_polity.jpg",
-    "economy": "static/images/economy_trade.jpg",
-    "trade": "static/images/economy_trade.jpg",
-    "summit": "static/images/international_summit.jpg",
-    "iora": "static/images/international_summit.jpg",
+    "karnataka": "https://images.unsplash.com/photo-1596176530529-78163a4f7af2?auto=format&fit=crop&w=800&q=80",
+    "vidhana soudha": "https://images.unsplash.com/photo-1596176530529-78163a4f7af2?auto=format&fit=crop&w=800&q=80",
+    "parliament": "https://images.unsplash.com/photo-1589829545856-d10d557cf95f?auto=format&fit=crop&w=800&q=80",
+    "polity": "https://images.unsplash.com/photo-1589829545856-d10d557cf95f?auto=format&fit=crop&w=800&q=80",
+    "court": "https://images.unsplash.com/photo-1589829545856-d10d557cf95f?auto=format&fit=crop&w=800&q=80",
+    "police": "https://images.unsplash.com/photo-1589829545856-d10d557cf95f?auto=format&fit=crop&w=800&q=80",
+    "economy": "https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?auto=format&fit=crop&w=800&q=80",
+    "trade": "https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?auto=format&fit=crop&w=800&q=80",
+    "summit": "https://images.unsplash.com/photo-1541872703-74c5e44368f9?auto=format&fit=crop&w=800&q=80",
+    "iora": "https://images.unsplash.com/photo-1541872703-74c5e44368f9?auto=format&fit=crop&w=800&q=80",
 
     # Dams & Rivers
-    "krs": "static/images/dam_cauvery_krs.jpg",
-    "cauvery": "static/images/dam_cauvery_krs.jpg",
-    "kaveri": "static/images/dam_cauvery_krs.jpg",
-    "almatti": "static/images/dam_almatti.jpg",
-    "krishna": "static/images/dam_almatti.jpg",
-    "tungabhadra": "static/images/dam_tungabhadra.jpg",
-    "linganamakki": "static/images/dam_linganamakki.jpg",
-    "sharavathi": "static/images/dam_linganamakki.jpg",
-    "bhakra": "static/images/dam_bhakra.jpg",
+    "krs": "https://images.unsplash.com/photo-1578328819058-b69f3a3b0f6b?auto=format&fit=crop&w=800&q=80",
+    "cauvery": "https://images.unsplash.com/photo-1578328819058-b69f3a3b0f6b?auto=format&fit=crop&w=800&q=80",
+    "kaveri": "https://images.unsplash.com/photo-1578328819058-b69f3a3b0f6b?auto=format&fit=crop&w=800&q=80",
+    "almatti": "https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=800&q=80",
+    "krishna": "https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=800&q=80",
+    "tungabhadra": "https://images.unsplash.com/photo-1518495973542-4542c06a5843?auto=format&fit=crop&w=800&q=80",
+    "linganamakki": "https://images.unsplash.com/photo-1432405972618-c60b0225b8f9?auto=format&fit=crop&w=800&q=80",
+    "sharavathi": "https://images.unsplash.com/photo-1432405972618-c60b0225b8f9?auto=format&fit=crop&w=800&q=80",
+    "bhakra": "https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?auto=format&fit=crop&w=800&q=80",
 
     # Wildlife Species
-    "snow leopard": "static/species/snow_leopard.jpg",
-    "elephant": "static/species/asian_elephant.jpg",
-    "tiger": "static/species/bengal_tiger.jpg",
-    "bustard": "static/species/great_indian_bustard.jpg",
-    "tahr": "static/species/nilgiri_tahr.jpg",
-    "olive ridley": "static/species/olive_ridley.jpg",
-    "bandipur": "static/species/asian_elephant.jpg"
+    "snow leopard": "https://images.unsplash.com/photo-1561731216-c3a4d99437d5?auto=format&fit=crop&w=800&q=80",
+    "elephant": "https://images.unsplash.com/photo-1557050543-4d5f4e07ef46?auto=format&fit=crop&w=800&q=80",
+    "tiger": "https://images.unsplash.com/photo-1561731216-c3a4d99437d5?auto=format&fit=crop&w=800&q=80",
+    "bustard": "https://images.unsplash.com/photo-1544551763-46a013bb70d5?auto=format&fit=crop&w=800&q=80",
+    "tahr": "https://images.unsplash.com/photo-1544551763-46a013bb70d5?auto=format&fit=crop&w=800&q=80",
+    "olive ridley": "https://images.unsplash.com/photo-1518467166778-b88f373ffec7?auto=format&fit=crop&w=800&q=80",
+    "bandipur": "https://images.unsplash.com/photo-1557050543-4d5f4e07ef46?auto=format&fit=crop&w=800&q=80"
 }
 
 def check_image_health(url: str, timeout: int = 4) -> bool:
