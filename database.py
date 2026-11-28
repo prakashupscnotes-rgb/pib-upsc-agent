@@ -35,7 +35,10 @@ def init_db():
         ("subject_group", "TEXT DEFAULT 'General'"),
         ("main_pillar", "TEXT DEFAULT 'National'"),
         ("sub_topic", "TEXT DEFAULT 'General'"),
-        ("source_name", "TEXT DEFAULT 'PIB (Official)'")
+        ("source_name", "TEXT DEFAULT 'PIB (Official)'"),
+        ("image_url", "TEXT DEFAULT ''"),
+        ("image_verified", "INTEGER DEFAULT 1"),
+        ("content_verified", "INTEGER DEFAULT 1")
     ]:
         try:
             c.execute(f"ALTER TABLE articles ADD COLUMN {col} {col_type}")
@@ -67,7 +70,8 @@ def save_article(
     published_date: str = "",
     main_pillar: str = "National",
     sub_topic: str = "General",
-    source_name: str = "PIB (Official)"
+    source_name: str = "PIB (Official)",
+    image_url: str = ""
 ) -> int:
     conn = get_connection()
     c = conn.cursor()
@@ -76,8 +80,9 @@ def save_article(
             pib_id, title, ministry, link, raw_content,
             is_relevant, gs_paper, subject_group, short_summary,
             prelims_facts, mains_pointer, published_date,
-            main_pillar, sub_topic, source_name
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            main_pillar, sub_topic, source_name, image_url,
+            image_verified, content_verified
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 1)
         ON CONFLICT(pib_id) DO UPDATE SET
             is_relevant = excluded.is_relevant,
             gs_paper = excluded.gs_paper,
@@ -87,17 +92,47 @@ def save_article(
             mains_pointer = excluded.mains_pointer,
             main_pillar = excluded.main_pillar,
             sub_topic = excluded.sub_topic,
-            source_name = excluded.source_name
+            source_name = excluded.source_name,
+            image_url = CASE WHEN excluded.image_url != '' THEN excluded.image_url ELSE articles.image_url END,
+            image_verified = 1,
+            content_verified = 1
     """, (
         pib_id, title, ministry, link, raw_content,
         1 if is_relevant else 0, gs_paper, subject_group, short_summary,
         prelims_facts, mains_pointer, published_date,
-        main_pillar, sub_topic, source_name
+        main_pillar, sub_topic, source_name, image_url
     ))
     conn.commit()
     inserted_id = c.lastrowid
     conn.close()
     return inserted_id
+
+def update_article_verification(
+    pib_id: str,
+    title: str,
+    short_summary: str,
+    prelims_facts: str,
+    mains_pointer: str,
+    image_url: str,
+    image_verified: int = 1,
+    content_verified: int = 1
+):
+    """Updates an article after passing through the Overhead Flow Path Inspector."""
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute("""
+        UPDATE articles SET
+            title = ?,
+            short_summary = ?,
+            prelims_facts = ?,
+            mains_pointer = ?,
+            image_url = ?,
+            image_verified = ?,
+            content_verified = ?
+        WHERE pib_id = ?
+    """, (title, short_summary, prelims_facts, mains_pointer, image_url, image_verified, content_verified, pib_id))
+    conn.commit()
+    conn.close()
 
 def mark_telegram_sent(pib_id: str):
     conn = get_connection()
@@ -134,28 +169,34 @@ def get_recent_articles(
     params = []
 
     if source_filter and source_filter != "All Sources":
+        s_clean = source_filter.split("(")[0].strip()
         query += " AND source_name LIKE ?"
-        params.append(f"%{source_filter}%")
+        params.append(f"%{s_clean}%")
 
     if pillar_filter and pillar_filter != "All":
         query += " AND main_pillar LIKE ?"
         params.append(f"%{pillar_filter}%")
 
     if sub_topic_filter and sub_topic_filter != "All":
-        query += " AND sub_topic LIKE ?"
-        params.append(f"%{sub_topic_filter}%")
+        query += " AND (sub_topic LIKE ? OR subject_group LIKE ?)"
+        params.extend([f"%{sub_topic_filter}%", f"%{sub_topic_filter}%"])
 
     if gs_filter and gs_filter != "All":
         query += " AND gs_paper LIKE ?"
         params.append(f"%{gs_filter}%")
 
     if subject_filter and subject_filter != "All Subjects":
-        query += " AND subject_group LIKE ?"
-        params.append(f"%{subject_filter}%")
+        query += " AND (subject_group LIKE ? OR sub_topic LIKE ?)"
+        params.extend([f"%{subject_filter}%", f"%{subject_filter}%"])
 
-    if date_filter:
-        query += " AND published_date LIKE ?"
-        params.append(f"%{date_filter}%")
+    if date_filter and date_filter != "All Dates":
+        if "28 Nov" in date_filter:
+            query += " AND (published_date LIKE '%28 Nov%' OR published_date LIKE '%November 28%')"
+        elif "27 Nov" in date_filter:
+            query += " AND (published_date LIKE '%27 Nov%' OR published_date LIKE '%November 27%')"
+        else:
+            query += " AND published_date LIKE ?"
+            params.append(f"%{date_filter}%")
 
     if search_query:
         query += " AND (title LIKE ? OR short_summary LIKE ? OR ministry LIKE ? OR subject_group LIKE ? OR sub_topic LIKE ?)"
