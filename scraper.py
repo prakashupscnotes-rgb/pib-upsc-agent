@@ -13,24 +13,29 @@ except ImportError:
     THIRD_PARTY_SCRAPER_AVAILABLE = False
 
 def ensure_english_pib_url(url: str) -> str:
-    """Ensures the PIB URL always has lang=1 so it opens the official English page."""
+    """Ensures the PIB URL points to PressReleasePage.aspx and forces lang=1."""
     if not url:
         return url
-    if "pib.gov.in" in url and "lang=" not in url.lower():
+    # Convert internal iframe page to standard release page
+    url = url.replace("PressReleaseIframePage.aspx", "PressReleasePage.aspx")
+    # Force lang=1
+    if "lang=" in url.lower():
+        url = re.sub(r"lang=\d+", "lang=1", url, flags=re.IGNORECASE)
+    elif "pib.gov.in" in url:
         sep = "&" if "?" in url else "?"
-        return f"{url}{sep}lang=1"
+        url = f"{url}{sep}lang=1"
     return url
 
-def is_english_text(text: str) -> bool:
-    """Checks that the text is primarily in English and has no Devanagari/Indic script."""
-    if not text:
-        return False
-    # If it contains Devanagari characters, it is Hindi/regional
-    if any('\u0900' <= char <= '\u0d7f' for char in text):
-        return False
-    # Must have reasonable ASCII alphabetic content
-    ascii_letters = sum(1 for c in text if c.isascii() and c.isalpha())
-    return ascii_letters >= 4
+def clean_date_string(date_raw: str) -> str:
+    """Cleans Hindi and metadata prefixes from PIB date strings to produce clean English dates."""
+    if not date_raw:
+        return ""
+    d = date_raw.strip()
+    d = re.sub(r"^Release ID:\s*\d+,?\s*", "", d, flags=re.IGNORECASE)
+    d = re.sub(r"^Posted On:\s*", "", d, flags=re.IGNORECASE)
+    d = re.sub(r"^प्रविष्टि\s*तिथि:\s*", "", d, flags=re.IGNORECASE)
+    d = re.sub(r"\s+", " ", d).strip()
+    return d
 
 class PIBScraper:
     def __init__(self):
@@ -48,58 +53,52 @@ class PIBScraper:
                     resp.encoding = "utf-8"
                     return resp.text
             else:
+                import urllib.request
                 req = urllib.request.Request(url, headers=config.BROWSER_HEADERS)
                 with urllib.request.urlopen(req, timeout=15) as resp:
-                    raw_bytes = resp.read()
-                    return raw_bytes.decode("utf-8", errors="replace")
+                    return resp.read().decode("utf-8", errors="ignore")
         except Exception as e:
-            print(f"[Scraper] Network request error for {url}: {e}")
-        return None
+            print(f"[Scraper] Request failed for {url}: {e}")
+            return None
 
     def extract_prid_from_url(self, url: str) -> Optional[str]:
-        parsed = urllib.parse.urlparse(url)
-        params = urllib.parse.parse_qs(parsed.query)
-        prid = params.get("PRID") or params.get("prid")
-        if prid:
-            return prid[0]
         match = re.search(r"PRID=(\d+)", url, re.IGNORECASE)
-        if match:
-            return match.group(1)
-        return None
+        return match.group(1) if match else None
 
     def fetch_latest_releases_from_rss(self) -> List[Dict]:
-        """
-        Fetches latest press releases from official PIB RSS feed.
-        """
+        """Fetches the latest PIB releases from the official English RSS feed."""
         releases = []
         raw_xml = self._make_request(config.PIB_RSS_ENGLISH)
         if not raw_xml:
+            print("[Scraper] Empty RSS feed response.")
             return releases
 
         try:
-            # Parse RSS XML using standard library xml.etree.ElementTree
             import xml.etree.ElementTree as ET
-            root = ET.fromstring(raw_xml.encode("utf-8"))
-            for item in root.findall(".//item"):
-                title = item.findtext("title", "").strip()
-                link = item.findtext("link", "").strip()
-                pub_date = item.findtext("pubDate", "").strip()
-                desc = item.findtext("description", "").strip()
+            root = ET.fromstring(raw_xml)
+            channel = root.find("channel")
+            if channel is not None:
+                for item in channel.findall("item"):
+                    title = (item.findtext("title") or "Untitled").strip()
+                    link = (item.findtext("link") or "").strip()
+                    pub_date = (item.findtext("pubDate") or "").strip()
+                    desc = (item.findtext("description") or "").strip()
 
-                link = ensure_english_pib_url(link)
-                prid = self.extract_prid_from_url(link) or str(abs(hash(title)))
-                releases.append({
-                    "pib_id": prid,
-                    "title": title,
-                    "link": link,
-                    "published_date": pub_date,
-                    "initial_desc": desc
-                })
+                    link = ensure_english_pib_url(link)
+                    prid = self.extract_prid_from_url(link) or str(abs(hash(title)))
+
+                    releases.append({
+                        "pib_id": prid,
+                        "title": title,
+                        "link": link,
+                        "published_date": clean_date_string(pub_date),
+                        "initial_desc": desc
+                    })
         except Exception as e:
-            # Fallback regex parsing if XML has unescaped characters
+            # Fallback regex parser
             try:
-                items_raw = re.findall(r"<item>(.*?)</item>", raw_xml, flags=re.DOTALL | re.IGNORECASE)
-                for it in items_raw:
+                item_blocks = re.findall(r"<item>(.*?)</item>", raw_xml, flags=re.DOTALL | re.IGNORECASE)
+                for it in item_blocks:
                     t_match = re.search(r"<title>(.*?)</title>", it, flags=re.DOTALL | re.IGNORECASE)
                     l_match = re.search(r"<link>(.*?)</link>", it, flags=re.DOTALL | re.IGNORECASE)
                     p_match = re.search(r"<pubDate>(.*?)</pubDate>", it, flags=re.DOTALL | re.IGNORECASE)
@@ -111,13 +110,12 @@ class PIBScraper:
                     desc = d_match.group(1).strip() if d_match else ""
 
                     link = ensure_english_pib_url(link)
-                    link = ensure_english_pib_url(link)
-                prid = self.extract_prid_from_url(link) or str(abs(hash(title)))
+                    prid = self.extract_prid_from_url(link) or str(abs(hash(title)))
                     releases.append({
                         "pib_id": prid,
                         "title": title,
                         "link": link,
-                        "published_date": pub_date,
+                        "published_date": clean_date_string(pub_date),
                         "initial_desc": desc
                     })
             except Exception as ex2:
@@ -127,13 +125,18 @@ class PIBScraper:
 
     def fetch_article_full_content(self, url: str) -> Dict[str, str]:
         """
-        Scrapes the full text and ministry details from the specific PIB article URL.
+        Scrapes the full text, title, ministry, and date from the PIB article URL.
+        If the page is Hindi, automatically detects and follows the official 'English' link.
         """
         result = {
+            "title": "",
             "ministry": "Government of India",
             "content": "",
-            "date": ""
+            "date": "",
+            "english_url": ensure_english_pib_url(url),
+            "pib_id": self.extract_prid_from_url(url) or ""
         }
+        
         raw_html = self._make_request(url)
         if not raw_html:
             return result
@@ -141,14 +144,45 @@ class PIBScraper:
         try:
             if THIRD_PARTY_SCRAPER_AVAILABLE:
                 soup = BeautifulSoup(raw_html, "html.parser")
+
+                # Check if this page has an English version switch link in language bar
+                for a in soup.find_all("a"):
+                    txt = a.get_text(strip=True).lower()
+                    href = a.get("href", "")
+                    if txt == "english" and "prid=" in href.lower():
+                        eng_url = href if href.startswith("http") else "https://pib.gov.in/" + href.lstrip("/")
+                        eng_url = ensure_english_pib_url(eng_url)
+                        eng_html = self._make_request(eng_url)
+                        if eng_html:
+                            # Switch to official English page
+                            raw_html = eng_html
+                            soup = BeautifulSoup(raw_html, "html.parser")
+                            result["english_url"] = eng_url
+                            eng_prid = self.extract_prid_from_url(eng_url)
+                            if eng_prid:
+                                result["pib_id"] = eng_prid
+                        break
+
+                # Extract Title
+                title_elem = soup.find("h1") or soup.find("h2") or soup.find(class_=re.compile(r"release-title|title", re.I))
+                if title_elem and len(title_elem.get_text(strip=True)) > 5:
+                    result["title"] = title_elem.get_text(strip=True)
+
+                # Extract Ministry
                 ministry_elem = soup.find(class_=re.compile(r"Ministry|minName|release-ministry", re.IGNORECASE))
                 if ministry_elem:
                     result["ministry"] = ministry_elem.get_text(strip=True)
 
+                # Extract Date
                 date_elem = soup.find(class_=re.compile(r"ReleaseDate|release-date|date", re.IGNORECASE))
                 if date_elem:
-                    result["date"] = date_elem.get_text(strip=True)
+                    result["date"] = clean_date_string(date_elem.get_text(strip=True))
 
+                # Extract Sub-heading if present
+                h3_elem = soup.find("h3")
+                subhead = h3_elem.get_text(strip=True) if h3_elem else ""
+
+                # Extract Body Paragraphs
                 body_elem = soup.find("div", class_=re.compile(r"innertrans|release-text|content-area", re.IGNORECASE))
                 if not body_elem:
                     body_elem = soup.find("article") or soup.find("main")
@@ -157,10 +191,16 @@ class PIBScraper:
                     for unwanted in body_elem(["script", "style", "nav", "footer", "form"]):
                         unwanted.decompose()
                     paragraphs = [p.get_text(strip=True) for p in body_elem.find_all(["p", "li"])]
-                    result["content"] = "\n".join([p for p in paragraphs if len(p) > 20])
+                    valid_p = [p for p in paragraphs if len(p) > 25]
                 else:
                     paragraphs = [p.get_text(strip=True) for p in soup.find_all("p")]
-                    result["content"] = "\n".join([p for p in paragraphs if len(p) > 30])
+                    valid_p = [p for p in paragraphs if len(p) > 30]
+
+                if subhead and len(subhead) > 20:
+                    valid_p.insert(0, subhead)
+
+                result["content"] = "\n\n".join(valid_p)
+
             else:
                 # Built-in regex text extractor fallback
                 text = re.sub(r"<(script|style|nav|footer)[^>]*>.*?</\1>", "", raw_html, flags=re.DOTALL | re.IGNORECASE)
@@ -170,7 +210,7 @@ class PIBScraper:
                     clean = re.sub(r"<[^>]+>", "", p).strip()
                     if len(clean) > 25:
                         clean_ps.append(clean)
-                result["content"] = "\n".join(clean_ps)
+                result["content"] = "\n\n".join(clean_ps)
 
         except Exception as e:
             print(f"[Scraper] Error parsing article HTML {url}: {e}")
@@ -178,9 +218,7 @@ class PIBScraper:
         return result
 
     def get_new_releases(self) -> List[Dict]:
-        """
-        Pulls latest releases and fetches full text for each.
-        """
+        """Pulls latest releases and fetches full text for each."""
         releases = self.fetch_latest_releases_from_rss()
         detailed_releases = []
 
@@ -190,10 +228,10 @@ class PIBScraper:
             content = details["content"] if details["content"] else item.get("initial_desc", "")
 
             detailed_releases.append({
-                "pib_id": item["pib_id"],
-                "title": item["title"],
+                "pib_id": details.get("pib_id") or item["pib_id"],
+                "title": details.get("title") or item["title"],
                 "ministry": details["ministry"],
-                "link": url,
+                "link": details.get("english_url") or url,
                 "published_date": details["date"] or item["published_date"],
                 "content": content
             })

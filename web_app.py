@@ -1,5 +1,8 @@
 import streamlit as st
+import re
+import importlib
 import database
+importlib.reload(database)
 
 st.set_page_config(
     page_title="PIB Daily UPSC Digest",
@@ -39,18 +42,25 @@ st.markdown("""
         font-size: 0.85rem;
         background-color: #f3f4f6;
         color: #4b5563;
+        margin-right: 8px;
     }
     .summary-text {
         font-size: 1.05rem;
         line-height: 1.6;
         color: #1f2937;
-        margin: 12px 0;
+        margin: 14px 0;
     }
 </style>
 """, unsafe_allow_html=True)
 
 # Ensure database exists
 database.init_db()
+
+# Initialize session state for active filters
+if "selected_subject" not in st.session_state:
+    st.session_state["selected_subject"] = "All Subjects"
+if "selected_gs" not in st.session_state:
+    st.session_state["selected_gs"] = "All"
 
 # Sidebar
 st.sidebar.title("🏛 PIB UPSC Agent")
@@ -80,51 +90,42 @@ if st.sidebar.button("🔄 Check & Fetch Latest PIB News", use_container_width=T
                 details = scraper.fetch_article_full_content(item["link"])
                 content = details["content"] or item.get("initial_desc", "")
                 ministry = details["ministry"]
+                title = details.get("title") or item["title"]
+                actual_link = details.get("english_url") or item["link"]
+                actual_date = details.get("date") or item.get("published_date", "")
 
-                analysis = agent.analyze(item["title"], ministry, content)
+                analysis = agent.analyze(title, ministry, content)
                 is_relevant = analysis.get("is_relevant", False)
 
-                clean_title = analysis.get("title_en") or item["title"]
+                clean_title = analysis.get("title_en") or title
                 clean_ministry = analysis.get("ministry_en") or ministry
                 clean_subject = analysis.get("subject_group") or "General"
+                clean_gs = analysis.get("gs_paper") or "GS-2"
+                if clean_gs.strip().lower() == "none":
+                    clean_gs = "GS-2"
 
-                try:
-                    database.save_article(
-                        pib_id=prid,
-                        title=clean_title,
-                        ministry=clean_ministry,
-                        link=item["link"],
-                        raw_content=content,
-                        is_relevant=is_relevant,
-                        gs_paper=analysis.get("gs_paper", ""),
-                        subject_group=clean_subject,
-                        short_summary=analysis.get("short_summary", ""),
-                        prelims_facts=analysis.get("prelims_facts", ""),
-                        mains_pointer=analysis.get("mains_pointer", ""),
-                        published_date=item.get("published_date", "")
-                    )
-                except TypeError:
-                    database.save_article(
-                        pib_id=prid,
-                        title=clean_title,
-                        ministry=clean_ministry,
-                        link=item["link"],
-                        raw_content=content,
-                        is_relevant=is_relevant,
-                        gs_paper=analysis.get("gs_paper", ""),
-                        short_summary=analysis.get("short_summary", ""),
-                        prelims_facts=analysis.get("prelims_facts", ""),
-                        mains_pointer=analysis.get("mains_pointer", ""),
-                        published_date=item.get("published_date", "")
-                    )
+                database.save_article(
+                    pib_id=prid,
+                    title=clean_title,
+                    ministry=clean_ministry,
+                    link=actual_link,
+                    raw_content=content,
+                    is_relevant=is_relevant,
+                    gs_paper=clean_gs,
+                    subject_group=clean_subject,
+                    short_summary=analysis.get("short_summary", ""),
+                    prelims_facts=analysis.get("prelims_facts", ""),
+                    mains_pointer=analysis.get("mains_pointer", ""),
+                    published_date=actual_date
+                )
 
                 if is_relevant:
                     relevant_count += 1
                     article_payload = {
                         "title": clean_title,
                         "ministry": clean_ministry,
-                        "link": item["link"],
-                        "gs_paper": analysis.get("gs_paper", ""),
+                        "link": actual_link,
+                        "gs_paper": clean_gs,
                         "subject_group": clean_subject,
                         "short_summary": analysis.get("short_summary", ""),
                         "prelims_facts": analysis.get("prelims_facts", ""),
@@ -139,6 +140,31 @@ if st.sidebar.button("🔄 Check & Fetch Latest PIB News", use_container_width=T
             st.sidebar.success(f"Processed {processed_count} releases ({relevant_count} relevant for UPSC).")
         except Exception as e:
             st.sidebar.warning(f"Live fetch notice: {e}")
+
+# 1-Click Auto-Sync to GitHub
+import sync_github
+gh_token = sync_github.get_github_token()
+
+with st.sidebar.expander("☁️ Auto-Sync to GitHub", expanded=not bool(gh_token)):
+    if not gh_token:
+        st.caption("Paste your GitHub Personal Access Token to enable 1-click automatic cloud sync:")
+        user_token_input = st.text_input("GitHub Token (starts with ghp_)", type="password", key="input_gh_token")
+        if st.button("💾 Save & Connect", use_container_width=True):
+            if user_token_input.strip():
+                with open(".env", "a", encoding="utf-8") as env_f:
+                    env_f.write(f"\nGITHUB_TOKEN={user_token_input.strip()}\n")
+                st.success("Connected to GitHub! All future updates will sync automatically.")
+                st.rerun()
+    else:
+        st.caption("Connected to `prakashupscnotes-rgb/pib-upsc-agent`")
+        if st.button("🚀 Push All Updates to GitHub", use_container_width=True):
+            with st.spinner("Syncing all code, database & fixes to GitHub..."):
+                res = sync_github.sync_all_files(gh_token)
+                ok_count = sum(1 for v in res.values() if v)
+                if ok_count > 0:
+                    st.success(f"Synced {ok_count} files to GitHub!")
+                else:
+                    st.error("Sync failed. Check token permissions.")
 
 # Filter Section
 st.sidebar.markdown("---")
@@ -155,17 +181,20 @@ subject_options = [
     "🤝 Social Justice & Health",
     "🏛️ Art & Culture"
 ]
-selected_subject = st.sidebar.selectbox("Filter by Subject Group", subject_options)
+
+current_subj_idx = subject_options.index(st.session_state["selected_subject"]) if st.session_state["selected_subject"] in subject_options else 0
+selected_subject = st.sidebar.selectbox("Filter by Subject Group", subject_options, index=current_subj_idx)
+st.session_state["selected_subject"] = selected_subject
 
 # Strip emoji for DB query
 db_subject_filter = None
 if selected_subject != "All Subjects":
     db_subject_filter = selected_subject.split(" ", 1)[-1].strip()
 
-gs_choice = st.sidebar.selectbox(
-    "Filter by GS Syllabus",
-    ["All", "GS-1", "GS-2", "GS-3", "GS-4", "Prelims Pointer"]
-)
+gs_options = ["All", "GS-1", "GS-2", "GS-3", "GS-4", "Prelims Pointer"]
+current_gs_idx = gs_options.index(st.session_state["selected_gs"]) if st.session_state["selected_gs"] in gs_options else 0
+gs_choice = st.sidebar.selectbox("Filter by GS Syllabus", gs_options, index=current_gs_idx)
+st.session_state["selected_gs"] = gs_choice
 
 search_term = st.sidebar.text_input("Search Topics / Ministry", placeholder="e.g. DRDO, ISRO, RBI, Health...")
 
@@ -182,22 +211,30 @@ st.title("📰 PIB Daily UPSC Digest")
 st.markdown("Exam-oriented daily summaries categorized by **GS Paper** & **Subject Group** with direct official English PIB links.")
 
 # Quick subject pills at the top
-st.caption("Quick Subject Filter:")
-cols = st.columns(4)
+st.caption(f"Quick Subject Filter (Active: **{selected_subject}**):")
+cols = st.columns(5)
 with cols[0]:
-    if st.button("🛡️ Defence", use_container_width=True):
-        db_subject_filter = "Defence & Security"
+    if st.button("🌐 All", use_container_width=True):
+        st.session_state["selected_subject"] = "All Subjects"
+        st.rerun()
 with cols[1]:
-    if st.button("🚀 Science & Tech", use_container_width=True):
-        db_subject_filter = "Science & Technology"
+    if st.button("🛡️ Defence", use_container_width=True):
+        st.session_state["selected_subject"] = "🛡️ Defence & Security"
+        st.rerun()
 with cols[2]:
-    if st.button("💰 Economy", use_container_width=True):
-        db_subject_filter = "Economy & Infrastructure"
+    if st.button("🚀 Science", use_container_width=True):
+        st.session_state["selected_subject"] = "🚀 Science & Technology"
+        st.rerun()
 with cols[3]:
-    if st.button("🌾 Environment", use_container_width=True):
-        db_subject_filter = "Environment & Agriculture"
+    if st.button("💰 Economy", use_container_width=True):
+        st.session_state["selected_subject"] = "💰 Economy & Infrastructure"
+        st.rerun()
+with cols[4]:
+    if st.button("🤝 Health / Justice", use_container_width=True):
+        st.session_state["selected_subject"] = "🤝 Social Justice & Health"
+        st.rerun()
 
-# Fetch articles from database with backward-compatible argument handling
+# Fetch articles from database with fail-safe fallback
 try:
     articles = database.get_recent_articles(
         limit=50,
@@ -213,22 +250,37 @@ except TypeError:
     )
 
 if not articles:
-    st.info("No articles found matching your criteria. Click **'🔄 Check & Fetch Latest PIB News'** in the sidebar to scrape and process the latest releases!")
+    st.info("No articles found matching your criteria. Try switching subject filters or click **'🔄 Check & Fetch Latest PIB News'** in the sidebar!")
 else:
     st.write(f"Showing **{len(articles)}** curated articles.")
 
     for art in articles:
-        gs_tag = art.get("gs_paper") or "UPSC GS"
-        subject_group = art.get("subject_group") or "General Affairs"
+        gs_tag = art.get("gs_paper") or "GS-2"
+        if gs_tag.strip().lower() == "none":
+            gs_tag = "GS-2"
+
+        subject_group = art.get("subject_group") or "General"
         ministry = art.get("ministry") or "Government of India"
         title = art.get("title", "")
         summary = art.get("short_summary", "")
         prelims = art.get("prelims_facts", "")
         mains = art.get("mains_pointer", "")
-        link = art.get("link", "#")
-        if "pib.gov.in" in link and "lang=" not in link.lower():
-            link += "&lang=1" if "?" in link else "?lang=1"
+
+        # Clean date string
         pub_date = art.get("published_date", "")
+        if pub_date:
+            pub_date = re.sub(r"^प्रविष्टि\s*तिथि:\s*", "", pub_date).strip()
+            pub_date = re.sub(r"^Posted\s*On:\s*", "", pub_date, flags=re.I).strip()
+            pub_date = re.sub(r"^Release ID:\s*\d+,?\s*", "", pub_date, flags=re.I).strip()
+
+        # Build official English PIB link
+        link = art.get("link", "#")
+        link = link.replace("PressReleaseIframePage.aspx", "PressReleasePage.aspx")
+        if "lang=" in link.lower():
+            link = re.sub(r"lang=\d+", "lang=1", link, flags=re.IGNORECASE)
+        elif "pib.gov.in" in link:
+            sep = "&" if "?" in link else "?"
+            link = f"{link}{sep}lang=1"
 
         with st.container():
             st.markdown(f"""

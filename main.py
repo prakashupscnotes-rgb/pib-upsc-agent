@@ -18,83 +18,108 @@ def run_pipeline():
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     print(f"\n[{timestamp}] --- Starting PIB UPSC Monitor Cycle ---")
 
-    scraper = PIBScraper()
-    agent = UPSCNewsAgent()
-    notifier = TelegramNotifier()
+    try:
+        database.init_db()
+        scraper = PIBScraper()
+        agent = UPSCNewsAgent()
+        notifier = TelegramNotifier()
 
-    # 1. Fetch releases
-    releases = scraper.fetch_latest_releases_from_rss()
-    print(f"[{timestamp}] Retrieved {len(releases)} items from PIB RSS feed.")
+        # 1. Fetch releases
+        releases = scraper.fetch_latest_releases_from_rss()
+        print(f"[{timestamp}] Retrieved {len(releases)} items from PIB RSS feed.")
 
-    processed = 0
-    relevant_found = 0
+        processed = 0
+        relevant_found = 0
 
-    for item in releases:
-        prid = item["pib_id"]
-        link = item["link"]
-        title = item["title"]
+        for item in releases:
+            try:
+                prid = item["pib_id"]
+                link = item["link"]
+                title = item["title"]
 
-        # Check if already processed
-        if database.is_article_processed(prid):
-            continue
+                # Check if already processed
+                if database.is_article_processed(prid):
+                    continue
 
-        print(f"\n[New Release] Processing PRID {prid}: {title[:60]}...")
+                print(f"\n[New Release] Processing PRID {prid}: {title[:60]}...")
 
-        # 2. Extract full text
-        details = scraper.fetch_article_full_content(link)
-        content = details["content"] or item.get("initial_desc", "")
-        ministry = details["ministry"]
+                # 2. Extract full text
+                details = scraper.fetch_article_full_content(link)
+                content = details["content"] or item.get("initial_desc", "")
+                ministry = details["ministry"]
 
-        # 3. Agentic AI Evaluation
-        analysis = agent.analyze(title=title, ministry=ministry, content=content)
-        is_relevant = analysis.get("is_relevant", False)
+                # 3. Agentic AI Evaluation
+                analysis = agent.analyze(title=title, ministry=ministry, content=content)
+                is_relevant = analysis.get("is_relevant", False)
 
-        # Use English-refined title, ministry and subject
-        clean_title = analysis.get("title_en") or title
-        clean_ministry = analysis.get("ministry_en") or ministry
-        clean_subject = analysis.get("subject_group") or "General"
+                # Use English-refined title, ministry and subject
+                clean_title = analysis.get("title_en") or title
+                clean_ministry = analysis.get("ministry_en") or ministry
+                clean_subject = analysis.get("subject_group") or "General"
+                clean_gs = analysis.get("gs_paper") or "GS-2"
+                if clean_gs.strip().lower() == "none":
+                    clean_gs = "GS-2"
 
-        # 4. Save to Database
-        database.save_article(
-            pib_id=prid,
-            title=clean_title,
-            ministry=clean_ministry,
-            link=link,
-            raw_content=content,
-            is_relevant=is_relevant,
-            gs_paper=analysis.get("gs_paper", ""),
-            subject_group=clean_subject,
-            short_summary=analysis.get("short_summary", ""),
-            prelims_facts=analysis.get("prelims_facts", ""),
-            mains_pointer=analysis.get("mains_pointer", ""),
-            published_date=details.get("date") or item.get("published_date", "")
-        )
+                actual_link = details.get("english_url") or link
+                actual_date = details.get("date") or item.get("published_date", "")
 
-        if is_relevant:
-            relevant_found += 1
-            print(f"  -> ✅ RELEVANT: Tagged as {analysis.get('gs_paper')} [{clean_subject}] | {clean_title[:50]}...")
+                # 4. Save to Database
+                database.save_article(
+                    pib_id=prid,
+                    title=clean_title,
+                    ministry=clean_ministry,
+                    link=actual_link,
+                    raw_content=content,
+                    is_relevant=is_relevant,
+                    gs_paper=clean_gs,
+                    subject_group=clean_subject,
+                    short_summary=analysis.get("short_summary", ""),
+                    prelims_facts=analysis.get("prelims_facts", ""),
+                    mains_pointer=analysis.get("mains_pointer", ""),
+                    published_date=actual_date
+                )
 
-            # 5. Send via Telegram Bot (100% English)
-            article_payload = {
-                "title": clean_title,
-                "ministry": clean_ministry,
-                "link": link,
-                "gs_paper": analysis.get("gs_paper", ""),
-                "subject_group": clean_subject,
-                "short_summary": analysis.get("short_summary", ""),
-                "prelims_facts": analysis.get("prelims_facts", ""),
-                "mains_pointer": analysis.get("mains_pointer", "")
-            }
-            if notifier.is_configured():
-                sent = notifier.send_article(article_payload)
-                if sent:
-                    database.mark_telegram_sent(prid)
-        else:
-            print(f"  -> ⏭ Filtered out: {analysis.get('relevance_reason', 'Not relevant to UPSC')}")
+                if is_relevant:
+                    relevant_found += 1
+                    print(f"  -> ✅ RELEVANT: Tagged as {clean_gs} [{clean_subject}] | {clean_title[:50]}...")
 
-        processed += 1
+                    # 5. Send via Telegram Bot (100% English)
+                    article_payload = {
+                        "title": clean_title,
+                        "ministry": clean_ministry,
+                        "link": actual_link,
+                        "gs_paper": clean_gs,
+                        "subject_group": clean_subject,
+                        "short_summary": analysis.get("short_summary", ""),
+                        "prelims_facts": analysis.get("prelims_facts", ""),
+                        "mains_pointer": analysis.get("mains_pointer", "")
+                    }
+                    if notifier.is_configured():
+                        sent = notifier.send_article(article_payload)
+                        if sent:
+                            database.mark_telegram_sent(prid)
+                else:
+                    print(f"  -> ⏭ Filtered out: {analysis.get('relevance_reason', 'Not relevant to UPSC')}")
 
-    print(f"[{timestamp}] Cycle Finished. Processed {processed} new releases ({relevant_found} marked relevant for UPSC).")
+                processed += 1
+            except Exception as item_err:
+                print(f"[Pipeline] Error processing item: {item_err}")
+                continue
+
+        print(f"[{timestamp}] Cycle Finished. Processed {processed} new releases ({relevant_found} marked relevant for UPSC).")
+
+        # 6. Auto-sync database to GitHub if token configured
+        try:
+            import sync_github
+            tok = sync_github.get_github_token()
+            if tok:
+                print("[AutoSync] Syncing updated database to GitHub...")
+                sync_github.push_file_to_github("pib_upsc.db", tok)
+        except Exception as e_sync:
+            print(f"[AutoSync] Skip sync: {e_sync}")
+
+    except Exception as pipe_err:
+        print(f"[Pipeline] Execution cycle caught error: {pipe_err}")
 
 def main():
     database.init_db()
