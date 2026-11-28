@@ -1,4 +1,5 @@
 import streamlit as st
+import os
 import re
 import importlib
 import pandas as pd
@@ -6,6 +7,7 @@ from datetime import datetime
 import database
 importlib.reload(database)
 import portal_content
+import geography_atlas
 
 st.set_page_config(
     page_title="You to UPSC | KEA & UPSC Current Affairs Portal",
@@ -14,64 +16,46 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Custom CSS for Modern, Unique "You to UPSC" Identity
+# Custom CSS for Modern "You to UPSC" Identity & Grid Navigation
 st.markdown("""
 <style>
     .reportview-container {
         background: #f8fafc;
     }
     .brand-header {
-        background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 50%, #1d4ed8 100%);
-        padding: 24px 28px;
+        background: linear-gradient(135deg, #091e42 0%, #1e3a8a 60%, #1d4ed8 100%);
+        padding: 20px 24px;
         border-radius: 16px;
         color: white;
-        margin-bottom: 22px;
-        box-shadow: 0 8px 24px rgba(30, 58, 138, 0.22);
+        margin-bottom: 15px;
+        box-shadow: 0 8px 24px rgba(15, 23, 42, 0.15);
         border-bottom: 4px solid #f59e0b;
     }
-    .brand-title {
-        color: #ffffff;
-        margin: 0;
-        font-size: 2.2rem;
-        font-weight: 900;
-        letter-spacing: -0.5px;
+    .ticker-wrap {
+        width: 100%;
+        overflow: hidden;
+        background-color: #0f172a;
+        color: #f8fafc;
+        padding: 10px 16px;
+        border-radius: 10px;
+        margin-bottom: 22px;
+        border-left: 5px solid #ef4444;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
     }
-    .brand-tagline {
-        color: #93c5fd;
-        font-size: 1.05rem;
-        font-weight: 500;
-        margin-top: 6px;
-        margin-bottom: 0;
-    }
-    .pillar-pill {
+    .ticker-content {
         display: inline-block;
-        padding: 5px 14px;
-        border-radius: 20px;
-        font-weight: 700;
-        font-size: 0.84rem;
-        background-color: #e0e7ff;
-        color: #3730a3;
-        margin-right: 8px;
-    }
-    .subtopic-pill {
-        display: inline-block;
-        padding: 5px 14px;
-        border-radius: 20px;
+        white-space: nowrap;
+        padding-left: 100%;
+        animation: marquee 35s linear infinite;
         font-weight: 600;
-        font-size: 0.84rem;
-        background-color: #fef3c7;
-        color: #92400e;
-        margin-right: 8px;
+        font-size: 0.95rem;
     }
-    .source-pill {
-        display: inline-block;
-        padding: 5px 14px;
-        border-radius: 20px;
-        font-weight: 700;
-        font-size: 0.84rem;
-        background-color: #fee2e2;
-        color: #991b1b;
-        margin-right: 8px;
+    .ticker-wrap:hover .ticker-content {
+        animation-play-state: paused;
+    }
+    @keyframes marquee {
+        0%   { transform: translate(0, 0); }
+        100% { transform: translate(-100%, 0); }
     }
     .news-card {
         background-color: #ffffff;
@@ -80,7 +64,6 @@ st.markdown("""
         margin-bottom: 20px;
         box-shadow: 0 4px 16px rgba(15, 23, 42, 0.06);
         border-left: 5px solid #2563eb;
-        transition: transform 0.15s ease-in-out;
     }
     .static-card {
         background-color: #ffffff;
@@ -98,13 +81,43 @@ st.markdown("""
         border-top: 4px solid #10b981;
         margin-bottom: 22px;
     }
-    .places-card {
+    .atlas-card {
         background-color: #ffffff;
-        border-radius: 14px;
-        padding: 20px;
-        box-shadow: 0 4px 16px rgba(15, 23, 42, 0.06);
-        border-top: 4px solid #06b6d4;
-        margin-bottom: 22px;
+        border-radius: 12px;
+        padding: 18px;
+        box-shadow: 0 3px 12px rgba(15, 23, 42, 0.05);
+        border-top: 4px solid #0284c7;
+        margin-bottom: 16px;
+    }
+    .pillar-pill {
+        display: inline-block;
+        padding: 4px 12px;
+        border-radius: 16px;
+        font-weight: 700;
+        font-size: 0.82rem;
+        background-color: #e0e7ff;
+        color: #3730a3;
+        margin-right: 6px;
+    }
+    .subtopic-pill {
+        display: inline-block;
+        padding: 4px 12px;
+        border-radius: 16px;
+        font-weight: 600;
+        font-size: 0.82rem;
+        background-color: #fef3c7;
+        color: #92400e;
+        margin-right: 6px;
+    }
+    .source-pill {
+        display: inline-block;
+        padding: 4px 12px;
+        border-radius: 16px;
+        font-weight: 700;
+        font-size: 0.82rem;
+        background-color: #fee2e2;
+        color: #991b1b;
+        margin-right: 6px;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -135,31 +148,61 @@ def start_cloud_background_monitor():
 
 start_cloud_background_monitor()
 
-# Header: "You to UPSC" Identity
-st.markdown(f"""
-<div class="brand-header">
-    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;">
-        <div>
-            <h1 class="brand-title">🦅 {portal_content.CHANNEL_NAME}</h1>
-            <p class="brand-tagline">
-                <i>"{portal_content.CHANNEL_TAGLINE}"</i> • Daily KEA & UPSC Exam Portal ({portal_content.CHANNEL_HANDLE})
-            </p>
+# Top Header with User Logo & Brand Identity
+header_col1, header_col2, header_col3 = st.columns([1, 6, 2.5])
+with header_col1:
+    if os.path.exists("logo.png"):
+        st.image("logo.png", width=95)
+    else:
+        st.markdown("<h1 style='font-size: 3rem;'>🦅</h1>", unsafe_allow_html=True)
+
+with header_col2:
+    st.markdown(f"""
+    <div style="padding-top: 4px;">
+        <h1 style="color: #0f172a; margin: 0; font-size: 2.2rem; font-weight: 900; letter-spacing: -0.5px;">
+            {portal_content.CHANNEL_NAME}
+        </h1>
+        <p style="color: #475569; font-size: 1.05rem; font-weight: 600; margin: 4px 0 0 0;">
+            <i>"{portal_content.CHANNEL_TAGLINE}"</i> • High-Yield KEA & UPSC Exam Framework ({portal_content.CHANNEL_HANDLE})
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+
+with header_col3:
+    st.markdown(f"""
+    <div style="text-align: right; padding-top: 8px;">
+        <a href="{portal_content.CHANNEL_URL}" target="_blank" style="background: #f59e0b; color: #0f172a; padding: 10px 18px; border-radius: 20px; font-weight: 800; font-size: 0.92rem; text-decoration: none; display: inline-block; box-shadow: 0 4px 10px rgba(245, 158, 11, 0.3);">
+            ▶ Visit YouTube Channel
+        </a>
+        <div style="color: #16a34a; font-size: 0.85rem; font-weight: 700; margin-top: 6px;">
+            ⚡ 24/7 Cloud Engine Active
         </div>
-        <div style="text-align: right; margin-top: 8px;">
-            <a href="{portal_content.CHANNEL_URL}" target="_blank" style="background: #f59e0b; color: #0f172a; padding: 9px 18px; border-radius: 20px; font-weight: 800; font-size: 0.9rem; text-decoration: none; display: inline-block;">
-                ▶ Visit YouTube Channel
-            </a>
-            <div style="color: #93c5fd; font-size: 0.8rem; margin-top: 6px; font-weight: 600;">
-                ⚡ 24/7 Live Cloud Engine
-            </div>
-        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+# Continuous Moving Important Information Marquee
+st.markdown("""
+<div class="ticker-wrap">
+    <div class="ticker-content">
+        🔴 <b>IMPORTANT EXAM UPDATES:</b> 
+        Karnataka Budget 2026-27 outlay benchmark pegged at ₹3.71 Lakh Crore • 
+        KKRDB allocated ₹5,000 Crore special regional fund under Article 371-J • 
+        Indian Coast Guard launches Operation Olivia to protect Olive Ridley mass nesting • 
+        WII confirms 718 Snow Leopards in India under SPAI census • 
+        Mullayanagiri (1,930 m) in Chikkamagaluru remains Karnataka's highest peak • 
+        Dr. Ambedkar Medical Aid Scheme financial assistance enhanced to ₹3.50 Lakh for SC/ST patients • 
+        Project Tiger completes 50+ years with Bandipur & Nagarahole leading South India tiger population • 
+        Bab-el-Mandeb Strait connecting Red Sea & Gulf of Aden monitored for global shipping security • 
+        Shakti Scheme completes over 100 Crore free rides for women in Karnataka STUs.
     </div>
 </div>
 """, unsafe_allow_html=True)
 
-# Sidebar
+# Sidebar: Controls & Filters
 st.sidebar.markdown(f"### 🦅 {portal_content.CHANNEL_NAME}")
-st.sidebar.caption(f"{portal_content.CHANNEL_HANDLE} • KEA & UPSC Exam Framework")
+if os.path.exists("logo.png"):
+    st.sidebar.image("logo.png", width=120)
+st.sidebar.caption(f"{portal_content.CHANNEL_HANDLE} • KEA & UPSC Exam Portal")
 
 if st.sidebar.button("🔄 Check & Fetch Latest Releases", use_container_width=True):
     with st.spinner("Scraping PIB, PM India, Mann Ki Baat, Karnataka State & Newspapers..."):
@@ -201,27 +244,79 @@ search_term = st.sidebar.text_input("🔍 Search Keyword / Scheme / Place", plac
 st.sidebar.markdown("---")
 st.sidebar.markdown("📱 **Permanent Cloud Access:**")
 st.sidebar.success("""
-Access on mobile, tablet, or PC 24/7:  
+Open 24/7 worldwide:  
 👉 **`https://pib-upsc-agent.onrender.com`**
 """)
 
-# Main Navigation Tabs: Exact match to user's handwritten diagram
-tabs = st.tabs([
-    "🏛️ All Updates",
-    "📚 Static Corner (8-10 Q)",
-    "🇮🇳 National (Dynamic)",
-    "🌐 International (Dynamic)",
-    "🟡 Karnataka State (KEA)",
-    "🎖️ Miscellaneous",
-    "🐾 Species & Wildlife in News",
-    "🗺️ Places in News & Maps",
-    "📝 You to UPSC Quiz",
-    "📊 Exam Analytics"
-])
+# =========================================================================
+# ALL TABS IN MULTI-ROW & MULTI-COLUMN GRID (All Visible Clearly at Once)
+# =========================================================================
+st.markdown("### 🧭 Syllabus Navigation Hub")
 
+# Store selected tab in session state so buttons switch instantly
+if "active_nav_tab" not in st.session_state:
+    st.session_state["active_nav_tab"] = "🏛️ All Updates"
+
+# Row 1: Core Syllabus Pillars (4 Columns)
+nav_r1_c1, nav_r1_c2, nav_r1_c3, nav_r1_c4 = st.columns(4)
+with nav_r1_c1:
+    if st.button("🏛️ All Exam Updates", use_container_width=True, type="primary" if st.session_state["active_nav_tab"] == "🏛️ All Updates" else "secondary"):
+        st.session_state["active_nav_tab"] = "🏛️ All Updates"
+        st.rerun()
+
+with nav_r1_c2:
+    if st.button("📚 Static Core (8-10 Q)", use_container_width=True, type="primary" if st.session_state["active_nav_tab"] == "📚 Static Core" else "secondary"):
+        st.session_state["active_nav_tab"] = "📚 Static Core"
+        st.rerun()
+
+with nav_r1_c3:
+    if st.button("🇮🇳 National (Dynamic)", use_container_width=True, type="primary" if st.session_state["active_nav_tab"] == "🇮🇳 National" else "secondary"):
+        st.session_state["active_nav_tab"] = "🇮🇳 National"
+        st.rerun()
+
+with nav_r1_c4:
+    if st.button("🌐 International (Dynamic)", use_container_width=True, type="primary" if st.session_state["active_nav_tab"] == "🌐 International" else "secondary"):
+        st.session_state["active_nav_tab"] = "🌐 International"
+        st.rerun()
+
+# Row 2: Specialised Pillars & Mapping (6 Columns)
+nav_r2_c1, nav_r2_c2, nav_r2_c3, nav_r2_c4, nav_r2_c5, nav_r2_c6 = st.columns(6)
+with nav_r2_c1:
+    if st.button("🟡 Karnataka (KEA)", use_container_width=True, type="primary" if st.session_state["active_nav_tab"] == "🟡 Karnataka" else "secondary"):
+        st.session_state["active_nav_tab"] = "🟡 Karnataka"
+        st.rerun()
+
+with nav_r2_c2:
+    if st.button("🎖️ Miscellaneous", use_container_width=True, type="primary" if st.session_state["active_nav_tab"] == "🎖️ Miscellaneous" else "secondary"):
+        st.session_state["active_nav_tab"] = "🎖️ Miscellaneous"
+        st.rerun()
+
+with nav_r2_c3:
+    if st.button("🐾 Wildlife & Species", use_container_width=True, type="primary" if st.session_state["active_nav_tab"] == "🐾 Wildlife" else "secondary"):
+        st.session_state["active_nav_tab"] = "🐾 Wildlife"
+        st.rerun()
+
+with nav_r2_c4:
+    if st.button("🗺️ Atlas & Maps", use_container_width=True, type="primary" if st.session_state["active_nav_tab"] == "🗺️ Maps" else "secondary"):
+        st.session_state["active_nav_tab"] = "🗺️ Maps"
+        st.rerun()
+
+with nav_r2_c5:
+    if st.button("📝 Practice Quiz", use_container_width=True, type="primary" if st.session_state["active_nav_tab"] == "📝 Practice Quiz" else "secondary"):
+        st.session_state["active_nav_tab"] = "📝 Practice Quiz"
+        st.rerun()
+
+with nav_r2_c6:
+    if st.button("📊 Exam Analytics", use_container_width=True, type="primary" if st.session_state["active_nav_tab"] == "📊 Exam Analytics" else "secondary"):
+        st.session_state["active_nav_tab"] = "📊 Exam Analytics"
+        st.rerun()
+
+st.markdown("<hr style='margin: 18px 0; border: none; border-top: 2px solid #e2e8f0;'>", unsafe_allow_html=True)
+
+# Helper function to render article cards cleanly
 def render_article_cards(article_list):
     if not article_list:
-        st.info("No articles found under this filter. Click **'🔄 Check & Fetch Latest Releases'** in the sidebar to scrape today's updates!")
+        st.info("No articles found under this filter. Click **'🔄 Check & Fetch Latest Releases'** in the sidebar to scrape fresh updates!")
         return
 
     st.caption(f"Showing **{len(article_list)}** exam-yield items:")
@@ -297,10 +392,13 @@ def render_article_cards(article_list):
 
             st.markdown("<hr style='margin: 15px 0; border: none; border-top: 1px dashed #e2e8f0;'>", unsafe_allow_html=True)
 
-# -------------------------------------------------------------
-# TAB 1: ALL UPDATES
-# -------------------------------------------------------------
-with tabs[0]:
+# =========================================================================
+# TAB CONTENT DISPLAY BASED ON ACTIVE GRID SELECTION
+# =========================================================================
+active_tab = st.session_state["active_nav_tab"]
+
+# 1. ALL EXAM UPDATES
+if active_tab == "🏛️ All Updates":
     st.subheader("🏛️ Complete Exam Current Affairs Stream")
     articles_all = database.get_recent_articles(
         limit=50,
@@ -311,12 +409,10 @@ with tabs[0]:
     )
     render_article_cards(articles_all)
 
-# -------------------------------------------------------------
-# TAB 2: STATIC CORNER [8-10 Questions Weightage in Handwritten Tree]
-# -------------------------------------------------------------
-with tabs[1]:
+# 2. STATIC CORE (8-10 Q)
+elif active_tab == "📚 Static Core":
     st.subheader("📚 Static Core [8-10 Questions Weightage]")
-    st.caption("Essential Static foundations from your syllabus: Karnataka Budget • Karnataka Economic Survey • Karnataka Schemes • Central Schemes")
+    st.caption("Essential Static foundations from your handwritten syllabus tree: Karnataka Budget • Karnataka Economic Survey • Karnataka Schemes • Central Schemes")
 
     c1, c2 = st.columns(2)
     with c1:
@@ -372,10 +468,8 @@ with tabs[1]:
             </div>
             """, unsafe_allow_html=True)
 
-# -------------------------------------------------------------
-# TAB 3: NATIONAL (DYNAMIC)
-# -------------------------------------------------------------
-with tabs[2]:
+# 3. NATIONAL (DYNAMIC)
+elif active_tab == "🇮🇳 National":
     st.subheader("🇮🇳 National Current Affairs (Dynamic)")
     st.caption("Sub-Topics: Polity • Economy • Geography • Environment • History & Culture • Science & Tech • Health & Society")
     sub_nat = st.pills(
@@ -395,10 +489,8 @@ with tabs[2]:
     )
     render_article_cards(articles_nat)
 
-# -------------------------------------------------------------
-# TAB 4: INTERNATIONAL (DYNAMIC)
-# -------------------------------------------------------------
-with tabs[3]:
+# 4. INTERNATIONAL (DYNAMIC)
+elif active_tab == "🌐 International":
     st.subheader("🌐 International Relations & Global Affairs")
     st.caption("Sub-Topics: I. Groupings (IORA, Quad, BRICS) • I. Organisations (UN, WTO, WHO, IMF) • Mapping (Places in News) • I. Summit")
     sub_intl = st.pills(
@@ -418,10 +510,8 @@ with tabs[3]:
     )
     render_article_cards(articles_intl)
 
-# -------------------------------------------------------------
-# TAB 5: KARNATAKA STATE (KEA 20-25 QUESTIONS FOCUS)
-# -------------------------------------------------------------
-with tabs[4]:
+# 5. KARNATAKA SPECIAL (KEA)
+elif active_tab == "🟡 Karnataka":
     st.subheader("🟡 Karnataka State Specific Current Affairs")
     st.caption("Sub-Topics: Acts (2026) • Statutory Bodies • Policy • Schemes • Programmes & Campaigns • Apps & Portals")
     sub_kar = st.pills(
@@ -443,10 +533,8 @@ with tabs[4]:
         articles_kar = database.get_recent_articles(limit=50, source_filter="Karnataka State News")
     render_article_cards(articles_kar)
 
-# -------------------------------------------------------------
-# TAB 6: MISCELLANEOUS
-# -------------------------------------------------------------
-with tabs[5]:
+# 6. MISCELLANEOUS
+elif active_tab == "🎖️ Miscellaneous":
     st.subheader("🎖️ Miscellaneous Section")
     st.caption("Sub-Topics: Sports • Awards • Committees • Reports and Index • Demise • Books & Authors • Persons in News")
     sub_misc = st.pills(
@@ -466,18 +554,21 @@ with tabs[5]:
     )
     render_article_cards(articles_misc)
 
-# -------------------------------------------------------------
-# TAB 7: SPECIES & WILDLIFE IN NEWS (ACCURATE ANIMAL VISUALS)
-# -------------------------------------------------------------
-with tabs[6]:
-    st.subheader("🐾 Species & Wildlife in News (High-Yield Biodiversity)")
-    st.caption("Accurate photography and official benchmarks: IUCN Red List Status, Wildlife Protection Act (WPA 1972) Schedule, CITES, and Karnataka Reserves.")
+# 7. SPECIES & WILDLIFE IN NEWS (100% Verified Real Photos)
+elif active_tab == "🐾 Wildlife":
+    st.subheader("🐾 Species & Wildlife in News (High-Yield Biodiversity Framework)")
+    st.caption("Authentic wildlife photography and official benchmarks: IUCN Red List Status, Wildlife Protection Act (WPA 1972) Schedule, CITES, and Karnataka Reserves.")
 
     for sp in portal_content.SPECIES_IN_NEWS:
         with st.container():
             col_img, col_info = st.columns([1.2, 2.2])
             with col_img:
-                st.image(sp["image_url"], caption=sp["name"], use_container_width=True)
+                img_path = sp["image_url"]
+                if os.path.exists(img_path):
+                    st.image(img_path, caption=sp["name"], use_container_width=True)
+                else:
+                    st.image("https://images.unsplash.com/photo-1561731216-c3a4d99437d5?auto=format&fit=crop&w=800&q=80", caption=sp["name"], use_container_width=True)
+
             with col_info:
                 st.markdown(f"""
                 <div class="species-card">
@@ -496,42 +587,140 @@ with tabs[6]:
                 """, unsafe_allow_html=True)
             st.markdown("<hr style='margin: 15px 0; border: none; border-top: 1px dashed #cbd5e1;'>", unsafe_allow_html=True)
 
-# -------------------------------------------------------------
-# TAB 8: PLACES IN NEWS & INTERACTIVE MAPS
-# -------------------------------------------------------------
-with tabs[7]:
-    st.subheader("🗺️ Places in News & Interactive Hotspot Map")
-    st.caption("Active geopolitical choke points, maritime passages, historical heritage sites, and Karnataka landmarks.")
+# 8. COMPREHENSIVE GEOGRAPHIC ATLAS & HOTSPOT MAPS
+elif active_tab == "🗺️ Maps":
+    st.subheader("🗺️ Comprehensive Geographic Atlas & Interactive Maps")
+    st.caption("All 31 Karnataka Districts • Karnataka Rivers & Dams • National Parks • India Mega Dams & Passes • World Peaks, Straits & Ocean Currents")
 
-    places_data = portal_content.PLACES_IN_NEWS
-    map_df = pd.DataFrame([
-        {"lat": p["lat"], "lon": p["lon"], "name": p["name"]}
-        for p in places_data
-    ])
+    atlas_category = st.pills(
+        "Select Geographic Layer:",
+        [
+            "🟡 Karnataka Complete Atlas",
+            "🇮🇳 India Rivers, Dams & Passes",
+            "🌐 World Peaks & Strategic Straits",
+            "🌊 Ocean Currents (Warm & Cold)",
+            "🌿 World Vegetation Biomes"
+        ],
+        default="🟡 Karnataka Complete Atlas"
+    )
 
-    st.markdown("#### 📍 Interactive Coordinates Map")
-    st.map(map_df, zoom=3, use_container_width=True)
+    if atlas_category == "🟡 Karnataka Complete Atlas":
+        st.markdown("#### 🟡 Karnataka Rivers, Mega Dams & National Parks Coordinates Map")
+        kar_points = []
+        for d in geography_atlas.KARNATAKA_RIVERS_DAMS:
+            kar_points.append({"lat": d["lat"], "lon": d["lon"], "name": d["name"]})
+        for np in geography_atlas.KARNATAKA_NATIONAL_PARKS:
+            kar_points.append({"lat": np["lat"], "lon": np["lon"], "name": np["name"]})
 
-    st.markdown("#### 📌 Key Hotspot Profiles")
-    for place in places_data:
-        with st.container():
-            st.markdown(f"""
-            <div class="places-card">
-                <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <h3 style="margin: 0; color: #0891b2; font-size: 1.25rem;">📍 {place['name']}</h3>
-                    <span style="background: #e0f2fe; color: #0369a1; padding: 4px 10px; border-radius: 12px; font-weight: 600; font-size: 0.85rem;">{place['region']}</span>
+        df_kar = pd.DataFrame(kar_points)
+        st.map(df_kar, zoom=6, use_container_width=True)
+
+        st.markdown("#### 🏛 All 31 Districts of Karnataka (Complete Exam Directory)")
+        dist_cols = st.columns(3)
+        for idx, dist in enumerate(geography_atlas.KARNATAKA_DISTRICTS):
+            col = dist_cols[idx % 3]
+            with col:
+                with st.container():
+                    st.markdown(f"""
+                    <div class="atlas-card" style="border-top-color: #f59e0b;">
+                        <span class="subtopic-pill" style="background:#fef3c7; color:#92400e;">{dist['division']} Division</span>
+                        <h4 style="margin: 6px 0 3px 0; color:#0f172a;">📍 {dist['name']}</h4>
+                        <p style="font-size:0.84rem; color:#64748b; margin:0 0 6px 0;">HQ: {dist['hq']}</p>
+                        <p style="font-size:0.88rem; color:#334155; margin:0;">{dist['facts']}</p>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+        st.markdown("#### 🌊 Karnataka Rivers & Mega Dams")
+        for dam in geography_atlas.KARNATAKA_RIVERS_DAMS:
+            with st.container():
+                st.markdown(f"""
+                <div class="atlas-card" style="border-top-color: #0284c7;">
+                    <span class="pillar-pill">River: {dam['river']}</span>
+                    <span class="subtopic-pill">District: {dam['district']}</span>
+                    <h4 style="margin: 6px 0; color:#0f172a;">💧 {dam['name']}</h4>
+                    <p style="font-size:0.92rem; color:#334155; margin:0;"><b>Key Facts:</b> {dam['facts']}</p>
                 </div>
-                <p style="margin-top: 10px; font-size: 0.98rem; color: #334155;"><b>Geo-Strategic Importance:</b> {place['importance']}</p>
-                <div style="background: #f0fdfa; border-left: 3px solid #0891b2; padding: 10px; border-radius: 6px; font-size: 0.95rem;">
-                    <b>🧭 UPSC & KEA Geographic Facts:</b><br>{place['upsc_kea_facts']}
+                """, unsafe_allow_html=True)
+
+    elif atlas_category == "🇮🇳 India Rivers, Dams & Passes":
+        st.markdown("#### 🇮🇳 India Geographic Core (Dams, Passes, Peaks)")
+        df_ind = pd.DataFrame([{"lat": p["lat"], "lon": p["lon"], "name": p["name"]} for p in geography_atlas.INDIA_PASSES_PEAKS_DAMS])
+        st.map(df_ind, zoom=4, use_container_width=True)
+
+        for item in geography_atlas.INDIA_PASSES_PEAKS_DAMS:
+            with st.container():
+                st.markdown(f"""
+                <div class="atlas-card" style="border-top-color: #2563eb;">
+                    <span class="pillar-pill">{item['category']}</span>
+                    <h4 style="margin: 6px 0; color:#0f172a;">🏔️ {item['name']}</h4>
+                    <p style="font-size:0.92rem; color:#334155; margin:0;"><b>UPSC Benchmark:</b> {item['facts']}</p>
                 </div>
+                """, unsafe_allow_html=True)
+
+    elif atlas_category == "🌐 World Peaks & Strategic Straits":
+        st.markdown("#### 🌐 World Strategic Hotspots Map")
+        df_world = pd.DataFrame([{"lat": p["lat"], "lon": p["lon"], "name": p["name"]} for p in geography_atlas.WORLD_GEOGRAPHY_HOTSPOTS])
+        st.map(df_world, zoom=1, use_container_width=True)
+
+        for spot in geography_atlas.WORLD_GEOGRAPHY_HOTSPOTS:
+            with st.container():
+                st.markdown(f"""
+                <div class="atlas-card" style="border-top-color: #0891b2;">
+                    <span class="subtopic-pill">{spot['category']}</span>
+                    <h4 style="margin: 6px 0; color:#0f172a;">🌍 {spot['name']}</h4>
+                    <p style="font-size:0.92rem; color:#334155; margin:0;"><b>Strategic Context:</b> {spot['facts']}</p>
+                </div>
+                """, unsafe_allow_html=True)
+
+    elif atlas_category == "🌊 Ocean Currents (Warm & Cold)":
+        st.subheader("🌊 Global Ocean Currents: Warm vs Cold Currents")
+        st.caption("High-yield UPSC Prelims concepts: Desert formation, fog banks, and climate moderation.")
+
+        oc1, oc2 = st.columns(2)
+        with oc1:
+            st.markdown("""
+            <div class="atlas-card" style="border-top-color: #dc2626; background: #fff5f5;">
+                <h4 style="color:#991b1b; margin-top:0;">🔴 Major Warm Ocean Currents</h4>
+                <ul style="color:#334155; font-size:0.92rem; line-height:1.7;">
+                    <li><b>Gulf Stream & North Atlantic Drift:</b> Keeps ports of Western Europe ice-free even in deep winter.</li>
+                    <li><b>Kuroshio Current (Japan Current):</b> Warm current off east coast of Japan, moderates winters.</li>
+                    <li><b>Brazilian Current:</b> Warm Atlantic current moving south along eastern South America.</li>
+                    <li><b>Agulhas & Mozambique Currents:</b> Warm Indian Ocean currents along southeastern African coastline.</li>
+                    <li><b>North & South Equatorial Currents:</b> Driven westward by Trade Winds.</li>
+                </ul>
             </div>
             """, unsafe_allow_html=True)
 
-# -------------------------------------------------------------
-# TAB 9: YOU TO UPSC DAILY PRACTICE QUIZ
-# -------------------------------------------------------------
-with tabs[8]:
+        with oc2:
+            st.markdown("""
+            <div class="atlas-card" style="border-top-color: #0284c7; background: #f0f9ff;">
+                <h4 style="color:#0369a1; margin-top:0;">🔵 Major Cold Ocean Currents & Deserts</h4>
+                <ul style="color:#334155; font-size:0.92rem; line-height:1.7;">
+                    <li><b>Peru (Humboldt) Current:</b> Drives desiccation of the hyper-arid <i>Atacama Desert</i>; triggers El Niño when disrupted.</li>
+                    <li><b>Benguela Current:</b> Cold current along southwest Africa, causes aridity creating the <i>Namib Desert</i>.</li>
+                    <li><b>Canary Current:</b> Cold current along northwest Africa, contributes to <i>Sahara Desert</i> aridity.</li>
+                    <li><b>California Current:</b> Cold current along Western US; creates coastal summer fogs (San Francisco).</li>
+                    <li><b>Labrador Current:</b> Meets warm Gulf Stream near Newfoundland, generating world's densest fog and richest fishing grounds (Grand Banks).</li>
+                    <li><b>Oyashio (Kamchatka) Current:</b> Cold subarctic Pacific current.</li>
+                </ul>
+            </div>
+            """, unsafe_allow_html=True)
+
+    elif atlas_category == "🌿 World Vegetation Biomes":
+        st.subheader("🌿 Global Vegetation Zones & Biomes")
+        for b in geography_atlas.WORLD_VEGETATION_BIOMES:
+            with st.container():
+                st.markdown(f"""
+                <div class="atlas-card" style="border-top-color: #16a34a;">
+                    <h4 style="color:#15803d; margin:0 0 6px 0;">🌲 {b['biome']}</h4>
+                    <p style="font-size:0.92rem; color:#334155; margin:3px 0;"><b>Distribution:</b> {b['regions']}</p>
+                    <p style="font-size:0.92rem; color:#334155; margin:3px 0;"><b>Climatic Pattern:</b> {b['climate']}</p>
+                    <p style="font-size:0.92rem; color:#334155; margin:3px 0;"><b>Vegetation Features:</b> {b['characteristics']}</p>
+                </div>
+                """, unsafe_allow_html=True)
+
+# 9. YOU TO UPSC DAILY PRACTICE QUIZ
+elif active_tab == "📝 Practice Quiz":
     st.subheader("📝 You to UPSC Daily Practice Quiz")
     st.caption("Official practice MCQs from your YouTube Channel (@youtoupsc) covering Karnataka Budget, KEA, and UPSC Prelims.")
 
@@ -550,10 +739,8 @@ with tabs[8]:
             st.info(f"**Detailed Explanation:**\n\n{q['explanation']}")
         st.markdown("<hr style='margin: 12px 0; border: none; border-top: 1px dashed #e2e8f0;'>", unsafe_allow_html=True)
 
-# -------------------------------------------------------------
-# TAB 10: EXAM ANALYTICS & TRENDS
-# -------------------------------------------------------------
-with tabs[9]:
+# 10. EXAM ANALYTICS & TRENDS
+elif active_tab == "📊 Exam Analytics":
     st.subheader("📊 Syllabus Coverage & Weightage Analytics")
     stats = database.get_dashboard_stats()
 

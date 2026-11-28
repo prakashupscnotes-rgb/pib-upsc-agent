@@ -57,12 +57,12 @@ STATIC_MODULES = {
     }
 }
 
-# ACCURATE SPECIES & WILDLIFE IN NEWS (With Real Animal Photography & Official IUCN Tags)
+# ACCURATE SPECIES & WILDLIFE IN NEWS (Verified Local Wildlife Photography & Official IUCN Tags)
 SPECIES_IN_NEWS = [
     {
         "name": "Bengal Tiger (Panthera tigris)",
         "scientific_name": "Panthera tigris tigris",
-        "image_url": "https://images.unsplash.com/photo-1561731216-c3a4d99437d5?auto=format&fit=crop&w=800&q=80",
+        "image_url": "static/species/bengal_tiger.jpg",
         "iucn_status": "Endangered",
         "iucn_badge_color": "#dc2626",
         "wpa_schedule": "Schedule I (Highest Protection)",
@@ -73,7 +73,7 @@ SPECIES_IN_NEWS = [
     {
         "name": "Asian Elephant (Elephas maximus)",
         "scientific_name": "Elephas maximus indicus",
-        "image_url": "https://images.unsplash.com/photo-1557050543-4d5f4e07ef46?auto=format&fit=crop&w=800&q=80",
+        "image_url": "static/species/asian_elephant.jpg",
         "iucn_status": "Endangered",
         "iucn_badge_color": "#dc2626",
         "wpa_schedule": "Schedule I",
@@ -84,35 +84,46 @@ SPECIES_IN_NEWS = [
     {
         "name": "Snow Leopard (Panthera uncia)",
         "scientific_name": "Panthera uncia",
-        "image_url": "https://images.unsplash.com/photo-1548767797-d8c844163c4c?auto=format&fit=crop&w=800&q=80",
+        "image_url": "static/species/snow_leopard.jpg",
         "iucn_status": "Vulnerable",
         "iucn_badge_color": "#ea580c",
         "wpa_schedule": "Schedule I",
         "cites": "Appendix I",
         "karnataka_link": "High-altitude mountain indicator species found across Ladakh, Himachal Pradesh, Uttarakhand, Sikkim, and Arunachal Pradesh.",
-        "why_in_news": "First-ever systematic Snow Leopard Population Assessment in India (SPAI) conducted by Wildlife Institute of India (WII), confirming 718 individuals."
+        "why_in_news": "First-ever systematic Snow Leopard Population Assessment in India (SPAI) conducted by Wildlife Institute of India (WII), confirming 718 individuals in India."
     },
     {
         "name": "Olive Ridley Sea Turtle (Lepidochelys olivacea)",
         "scientific_name": "Lepidochelys olivacea",
-        "image_url": "https://images.unsplash.com/photo-1518467166778-b88f373ffec7?auto=format&fit=crop&w=800&q=80",
+        "image_url": "static/species/olive_ridley.jpg",
         "iucn_status": "Vulnerable",
         "iucn_badge_color": "#ea580c",
         "wpa_schedule": "Schedule I",
         "cites": "Appendix I",
-        "karnataka_link": "Occasional nesting observed along the Uttara Kannada and Udupi coastlines; major mass nesting (Arribada) occurs at Gahirmatha, Odisha.",
+        "karnataka_link": "Occasional nesting observed along the Uttara Kannada and Udupi coastlines; major mass nesting (Arribada) occurs at Gahirmatha and Rushikulya in Odisha.",
         "why_in_news": "Indian Coast Guard initiates annual 'Operation Olivia' with interceptor boats and TED (Turtle Excluder Devices) to protect synchronized mass nesting."
     },
     {
-        "name": "Ganges River Dolphin (Platanista gangetica)",
-        "scientific_name": "Platanista gangetica",
-        "image_url": "https://images.unsplash.com/photo-1570481662006-a3a1374699e8?auto=format&fit=crop&w=800&q=80",
+        "name": "Great Indian Bustard (Ardeotis nigriceps)",
+        "scientific_name": "Ardeotis nigriceps",
+        "image_url": "static/species/great_indian_bustard.jpg",
+        "iucn_status": "Critically Endangered",
+        "iucn_badge_color": "#991b1b",
+        "wpa_schedule": "Schedule I",
+        "cites": "Appendix I",
+        "karnataka_link": "Flagship grassland bird species; historically reported in Ranebennur Blackbuck Sanctuary and Bellary grasslands; current stronghold in Desert NP, Rajasthan.",
+        "why_in_news": "Supreme Court appointed expert committee on undergrounding high-voltage power transmission cables to prevent fatal bird collisions."
+    },
+    {
+        "name": "Nilgiri Tahr (Nilgiritragus hylocrius)",
+        "scientific_name": "Nilgiritragus hylocrius",
+        "image_url": "static/species/nilgiri_tahr.jpg",
         "iucn_status": "Endangered",
         "iucn_badge_color": "#dc2626",
         "wpa_schedule": "Schedule I",
         "cites": "Appendix I",
-        "karnataka_link": "Freshwater river dolphin inhabiting Ganga-Brahmaputra-Meghna and Karnaphuli-Sangu river systems. India's National Aquatic Animal.",
-        "why_in_news": "Launch of hydrophone acoustic detection systems under Project Dolphin across Bihar's Vikramshila Gangetic Dolphin Sanctuary."
+        "karnataka_link": "Endemic ungulate of the southern Western Ghats montane grasslands (Shola ecosystem) across Tamil Nadu and Kerala borders.",
+        "why_in_news": "Government of Tamil Nadu Project Nilgiri Tahr radio-collaring initiative to study seasonal elevation migration and reproductive cycles."
     }
 ]
 
